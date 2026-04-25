@@ -1,0 +1,12 @@
+# railway.toml for the cron service
+# This is a SEPARATE Railway service from the main backend
+# Set it up as: New Service → Empty Service → paste these settings
+
+[build]
+builder = "nixpacks"
+buildCommand = "npm install"
+
+[deploy]
+# Runs at 2:00 AM UTC every night
+cronSchedule = "0 2 * * *"
+startCommand = "node src/cron.js"
