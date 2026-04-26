@@ -162,3 +162,21 @@ router.post('/:id/sync', async (req, res) => {
 });
 
 module.exports = router;
+
+// GET /api/politicians/debug/count — raw DB check
+router.get('/debug/count', async (req, res) => {
+  try {
+    const total = await db.query('SELECT COUNT(*) FROM politicians');
+    const ny = await db.query("SELECT COUNT(*) FROM politicians WHERE state = 'NY'");
+    const senate = await db.query("SELECT COUNT(*) FROM politicians WHERE chamber = 'senate'");
+    const sample = await db.query('SELECT id, full_name, state, chamber, in_office FROM politicians LIMIT 3');
+    res.json({
+      total: total.rows[0].count,
+      ny_count: ny.rows[0].count,
+      senate_count: senate.rows[0].count,
+      sample: sample.rows,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
