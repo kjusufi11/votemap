@@ -1,15 +1,13 @@
 // src/services/civic.js
-// Google Civic Information API
-// Resolves a ZIP code to the user's actual elected representatives at all levels
+// Google Civic Information API — resolves ZIP to representatives
 // Docs: https://developers.google.com/civic-information
 
 const axios = require('axios');
 const NodeCache = require('node-cache');
 
 const BASE = 'https://www.googleapis.com/civicinfo/v2';
-const cache = new NodeCache({ stdTTL: 86400 }); // ZIP lookups are stable, cache 24hr
+const cache = new NodeCache({ stdTTL: 86400 });
 
-// Map Google's office levels/roles to our categories
 const LEVEL_MAP = {
   country: 'federal',
   administrativeArea1: 'state',
@@ -20,9 +18,8 @@ const LEVEL_MAP = {
 const ROLE_MAP = {
   legislatorUpperBody: 'senator',
   legislatorLowerBody: 'representative',
-  governmentOfficer: 'officer',
   headOfGovernment: 'governor',
-  deputyHeadOfGovernment: 'lt_governor',
+  governmentOfficer: 'officer',
 };
 
 async function getRepresentativesByZip(zip) {
@@ -30,13 +27,12 @@ async function getRepresentativesByZip(zip) {
   if (cached) return cached;
 
   try {
+    // Don't pass levels/roles filters — fetch all and filter ourselves
+    // Google's API doesn't handle array params well via axios
     const { data } = await axios.get(`${BASE}/representatives`, {
       params: {
         key: process.env.GOOGLE_CIVIC_API_KEY,
         address: zip,
-        // We want all levels so users can see local officials too
-        levels: ['country', 'administrativeArea1'],
-        roles: ['legislatorUpperBody', 'legislatorLowerBody'],
       },
     });
 
@@ -56,32 +52,32 @@ function parseResponse(data) {
   const { normalizedInput, offices, officials } = data;
 
   if (!offices || !officials) {
-    return { state: null, district: null, representatives: [] };
+    return { state: null, city: null, zip: null, representatives: [] };
   }
 
   const representatives = [];
 
   offices.forEach((office) => {
     const level = office.levels?.[0];
-    const role = office.roles?.[0];
+    const role  = office.roles?.[0];
 
-    // Only include federal and state legislators for now
+    // Only federal and state legislators
     if (level !== 'country' && level !== 'administrativeArea1') return;
+    if (role !== 'legislatorUpperBody' && role !== 'legislatorLowerBody') return;
 
     office.officialIndices?.forEach((idx) => {
       const official = officials[idx];
       if (!official) return;
 
       representatives.push({
-        name: official.name,
-        office: office.name,
-        level: LEVEL_MAP[level] || level,
-        role: ROLE_MAP[role] || role,
-        party: normalizeParty(official.party),
-        phone: official.phones?.[0] || null,
-        url: official.urls?.[0] || null,
+        name:     official.name,
+        office:   office.name,
+        level:    LEVEL_MAP[level] || level,
+        role:     ROLE_MAP[role] || role,
+        party:    normalizeParty(official.party),
+        phone:    official.phones?.[0] || null,
+        url:      official.urls?.[0] || null,
         photoUrl: official.photoUrl || null,
-        // These won't always be present — we'll match to ProPublica IDs separately
         channels: official.channels || [],
       });
     });
@@ -89,8 +85,8 @@ function parseResponse(data) {
 
   return {
     state: normalizedInput?.state || null,
-    city: normalizedInput?.city || null,
-    zip: normalizedInput?.zip || null,
+    city:  normalizedInput?.city  || null,
+    zip:   normalizedInput?.zip   || null,
     representatives,
   };
 }
@@ -98,27 +94,24 @@ function parseResponse(data) {
 function normalizeParty(party) {
   if (!party) return null;
   const p = party.toLowerCase();
-  if (p.includes('democrat')) return 'D';
-  if (p.includes('republican')) return 'R';
+  if (p.includes('democrat'))    return 'D';
+  if (p.includes('republican'))  return 'R';
   if (p.includes('independent')) return 'I';
   return party;
 }
 
-// Match a Civic API representative to a ProPublica bioguide ID
-// by comparing normalized names + state + chamber
-function matchToBioguide(civicRep, propublicaMembers) {
+// Match civic rep name to a bioguide ID using our DB
+function matchToBioguide(civicRep, dbMembers) {
   const civicName = normalizeName(civicRep.name);
 
-  for (const member of propublicaMembers) {
+  for (const member of dbMembers) {
     const memberName = normalizeName(`${member.first_name} ${member.last_name}`);
     if (civicName === memberName) return member.id;
 
-    // Fuzzy: last name match + state match (handles middle names, suffixes)
-    const civicLast = civicName.split(' ').pop();
+    // Fuzzy: last name + state
+    const civicLast  = civicName.split(' ').pop();
     const memberLast = memberName.split(' ').pop();
-    if (civicLast === memberLast && member.state === civicRep.state) {
-      return member.id;
-    }
+    if (civicLast === memberLast && member.state === civicRep.state) return member.id;
   }
   return null;
 }
@@ -132,8 +125,4 @@ function normalizeName(name) {
     .trim();
 }
 
-module.exports = {
-  getRepresentativesByZip,
-  matchToBioguide,
-  normalizeName,
-};
+module.exports = { getRepresentativesByZip, matchToBioguide, normalizeName };
