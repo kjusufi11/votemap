@@ -1,471 +1,339 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import BiasBar from '../components/BiasBar';
 import { getPolitician, getPoliticianVotes, triggerAnalysis, getErrorMessage } from '../services/api';
 
-const PARTY_COLOR = { D: 'var(--party-d)', R: 'var(--party-r)', I: 'var(--party-i)' };
-const PARTY_DIM   = { D: 'var(--party-d-dim)', R: 'var(--party-r-dim)', I: 'var(--party-i-dim)' };
-const PARTY_LABEL = { D: 'Democrat', R: 'Republican', I: 'Independent' };
+const PC = { D: 'var(--party-d)', R: 'var(--party-r)', I: 'var(--party-i)' };
+const PD = { D: 'var(--party-d-dim)', R: 'var(--party-r-dim)', I: 'var(--party-i-dim)' };
+const PL = { D: 'Democrat', R: 'Republican', I: 'Independent' };
 
-const VOTE_COLOR = {
-  'Yes': 'var(--green)', 'Yea': 'var(--green)',
-  'No': 'var(--red)', 'Nay': 'var(--red)',
-  'Not Voting': 'var(--text-3)', 'Present': 'var(--amber)',
-};
-const VOTE_SHORT = {
-  'Yes': 'YEA', 'Yea': 'YEA',
-  'No': 'NAY', 'Nay': 'NAY',
-  'Not Voting': 'ABS', 'Present': 'PRE',
-};
+const voteColor = pos => pos === 'Yes' || pos === 'Yea' ? 'var(--green)' : pos === 'No' || pos === 'Nay' ? 'var(--red)' : pos === 'Not Voting' ? 'var(--text-3)' : 'var(--amber)';
+const voteShort = pos => pos === 'Yes' || pos === 'Yea' ? 'YEA' : pos === 'No' || pos === 'Nay' ? 'NAY' : pos === 'Not Voting' ? 'ABS' : 'PRE';
+
+const SUBJECTS = ['', 'Health', 'Armed Forces', 'Taxation', 'Environmental', 'Immigration', 'Crime', 'Civil Rights', 'International', 'Education', 'Finance', 'Energy'];
 
 export default function PoliticianProfile() {
   const { id } = useParams();
-
   const [pol,       setPol]       = useState(null);
-  const [votes,     setVotes]     = useState([]);
-  const [votePage,  setVotePage]  = useState(0);
-  const [voteTotal, setVoteTotal] = useState(0);
-  const [votePages, setVotePages] = useState(0);
+  const [allVotes,  setAllVotes]  = useState([]);
   const [biases,    setBiases]    = useState([]);
   const [analysis,  setAnalysis]  = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [loading,   setLoading]   = useState(true);
-  const [voteLoad,  setVoteLoad]  = useState(false);
   const [error,     setError]     = useState('');
+  // Vote filters
+  const [search,    setSearch]    = useState('');
+  const [posFilter, setPosFilter] = useState('');
+  const [subFilter, setSubFilter] = useState('');
+  const [votePage,  setVotePage]  = useState(0);
+  const VOTES_PER_PAGE = 15;
 
-  useEffect(() => {
-    loadProfile();
-  }, [id]);
+  useEffect(() => { loadAll(); }, [id]);
 
-  useEffect(() => {
-    if (pol) loadVotes(votePage);
-  }, [votePage, pol]);
-
-  async function loadProfile() {
+  async function loadAll() {
     setLoading(true);
     try {
-      const data = await getPolitician(id);
-      setPol(data);
-      setBiases(data.bias_scores || []);
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadVotes(page) {
-    setVoteLoad(true);
-    try {
-      const result = await getPoliticianVotes(id, page);
-      setVotes(result.votes || []);
-      setVoteTotal(result.total || 0);
-      setVotePages(result.pages || 0);
-    } catch {}
-    setVoteLoad(false);
+      const [polData, votesData] = await Promise.all([
+        getPolitician(id),
+        getPoliticianVotes(id, 0),
+      ]);
+      setPol(polData);
+      setBiases(polData.bias_scores || []);
+      // Load all pages of votes
+      let votes = votesData.votes || [];
+      if (votesData.pages > 1) {
+        const rest = await Promise.all(
+          Array.from({ length: votesData.pages - 1 }, (_, i) => getPoliticianVotes(id, i + 1))
+        );
+        rest.forEach(r => { votes = votes.concat(r.votes || []); });
+      }
+      setAllVotes(votes);
+    } catch (err) { setError(getErrorMessage(err)); }
+    finally { setLoading(false); }
   }
 
   async function runAnalysis() {
     setAnalyzing(true);
     try {
       const result = await triggerAnalysis(id);
-      if (result.analysis) {
-        setAnalysis(result.analysis);
-        setBiases(result.analysis.biases || []);
-      }
+      if (result.analysis) { setAnalysis(result.analysis); setBiases(result.analysis.biases || []); }
     } catch {}
     setAnalyzing(false);
   }
 
-  if (loading) return (
-    <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--text-3)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
-      <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--text-3)', margin: '0 auto 1rem', animation: 'pulse 1.2s ease infinite' }} />
-      Loading profile…
-    </div>
-  );
+  // Filtered votes
+  const filteredVotes = useMemo(() => {
+    return allVotes.filter(v => {
+      const title = (v.short_title || v.title || v.description || '').toLowerCase();
+      const subject = (v.primary_subject || '').toLowerCase();
+      if (search && !title.includes(search.toLowerCase()) && !subject.includes(search.toLowerCase())) return false;
+      if (posFilter && v.position !== posFilter) return false;
+      if (subFilter && !subject.includes(subFilter.toLowerCase())) return false;
+      return true;
+    });
+  }, [allVotes, search, posFilter, subFilter]);
 
-  if (error) return (
-    <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--red)', fontSize: 14 }}>
-      {error} — <Link to="/" style={{ color: 'var(--text-2)' }}>Go home</Link>
-    </div>
-  );
+  const pagedVotes = filteredVotes.slice(votePage * VOTES_PER_PAGE, (votePage + 1) * VOTES_PER_PAGE);
+  const totalPages = Math.ceil(filteredVotes.length / VOTES_PER_PAGE);
 
-  if (!pol) return null;
+  function handleFilterChange(setter) {
+    return (val) => { setter(val); setVotePage(0); };
+  }
 
-  const party = pol.party;
-  const initials = `${pol.first_name?.[0] || ''}${pol.last_name?.[0] || ''}`;
+  if (loading) return <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--text-3)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>Loading profile…</div>;
+  if (error)   return <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--red)', fontSize: 14 }}>{error} — <Link to="/">Go home</Link></div>;
+  if (!pol)    return null;
+
+  const ini = `${pol.first_name?.[0] || ''}${pol.last_name?.[0] || ''}`;
+  const dw  = pol.dw_nominate;
+  const dwPct = dw != null ? ((dw + 1) / 2 * 100).toFixed(1) : null;
+  const dwColor = dw < -.1 ? 'var(--blue)' : dw > .1 ? 'var(--red)' : 'var(--amber)';
+
+  const corruptionBiases = biases.filter(b => b.flag === 'corruption');
+  const foreignBiases    = biases.filter(b => b.flag === 'foreign');
+  const standardBiases   = biases.filter(b => !b.flag);
 
   return (
-    <main style={{ maxWidth: 960, margin: '0 auto', padding: '2.5rem 1.5rem 5rem' }}>
-
-      {/* Back */}
-      <Link to="/reps" style={{
-        fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-3)',
-        display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: '2rem',
-        transition: 'color var(--transition)',
-      }}
-        onMouseEnter={e => e.currentTarget.style.color = 'var(--text-2)'}
-        onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}
-      >
-        ← Back to my representatives
-      </Link>
+    <main style={{ maxWidth: 980, margin: '0 auto', padding: '2.5rem 1.5rem 5rem' }}>
+      <Link to="/reps" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', marginBottom: '1.75rem', transition: 'color var(--transition)' }}
+        onMouseEnter={e => e.currentTarget.style.color = 'var(--text)'}
+        onMouseLeave={e => e.currentTarget.style.color = 'var(--text-2)'}
+      >← Back to my representatives</Link>
 
       {/* Profile header */}
-      <header className="animate-fade-up" style={{
-        display: 'flex', gap: '1.5rem', alignItems: 'flex-start',
-        marginBottom: '2.5rem', flexWrap: 'wrap',
-      }}>
+      <header className="animate-fade-up" style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start', marginBottom: '2.25rem', flexWrap: 'wrap' }}>
         <div style={{
-          width: 72, height: 72, borderRadius: '50%', flexShrink: 0,
-          background: PARTY_DIM[party] || 'var(--bg-4)',
-          border: `1px solid ${PARTY_COLOR[party] || 'var(--border-med)'}33`,
+          width: 76, height: 76, borderRadius: '50%', flexShrink: 0,
+          background: PD[pol.party] || 'var(--bg-3)', color: PC[pol.party] || 'var(--text-2)',
+          border: `1px solid ${PC[pol.party] || 'var(--border-med)'}28`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700,
-          color: PARTY_COLOR[party] || 'var(--text-2)',
-        }}>
-          {initials}
-        </div>
-
+          fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700,
+        }}>{ini}</div>
         <div style={{ flex: 1 }}>
-          <h1 style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'clamp(1.75rem, 4vw, 2.75rem)',
-            fontWeight: 900, letterSpacing: '-0.02em', lineHeight: 1.1,
-            marginBottom: 8,
-          }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(1.9rem, 4vw, 3.1rem)', fontWeight: 900, letterSpacing: '-.022em', lineHeight: 1.04, marginBottom: '.5rem' }}>
             {pol.full_name}
           </h1>
-
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{
-              fontSize: 12, fontFamily: 'var(--font-mono)',
-              color: PARTY_COLOR[party] || 'var(--text-2)',
-              background: PARTY_DIM[party] || 'var(--bg-4)',
-              padding: '3px 10px', borderRadius: 4,
-            }}>
-              {PARTY_LABEL[party] || party}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: '.5rem' }}>
+            <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 3, background: PD[pol.party] || 'var(--bg-3)', color: PC[pol.party] || 'var(--text-2)' }}>
+              {PL[pol.party] || pol.party}
             </span>
             <span style={{ fontSize: 13, color: 'var(--text-2)' }}>
               {pol.title} · {pol.state}{pol.district ? `-${pol.district}` : ''} · {pol.chamber === 'senate' ? 'U.S. Senate' : 'U.S. House'}
             </span>
           </div>
-
           <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
             {[
               pol.total_votes && `${pol.total_votes.toLocaleString()} total votes`,
               pol.party_loyalty_pct && `${pol.party_loyalty_pct}% party loyalty`,
-              pol.missed_votes_pct && `${pol.missed_votes_pct}% missed votes`,
+              pol.missed_votes_pct && `${pol.missed_votes_pct}% missed`,
               pol.next_election && `Next election: ${pol.next_election}`,
             ].filter(Boolean).map((s, i) => (
-              <span key={i} style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>
-                {s}
-              </span>
+              <span key={i} style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>{s}</span>
             ))}
           </div>
         </div>
-
-        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          {pol.url && (
-            <a href={pol.url} target="_blank" rel="noreferrer" style={{
-              fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)',
-              border: '1px solid var(--border)', borderRadius: 'var(--radius)',
-              padding: '7px 14px', transition: 'all var(--transition)',
-            }}
-              onMouseEnter={e => { e.target.style.color='var(--text-2)'; e.target.style.borderColor='var(--border-med)'; }}
-              onMouseLeave={e => { e.target.style.color='var(--text-3)'; e.target.style.borderColor='var(--border)'; }}
-            >
-              Official site ↗
-            </a>
-          )}
-          {pol.twitter_handle && (
-            <a href={`https://twitter.com/${pol.twitter_handle}`} target="_blank" rel="noreferrer" style={{
-              fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)',
-              border: '1px solid var(--border)', borderRadius: 'var(--radius)',
-              padding: '7px 14px', transition: 'all var(--transition)',
-            }}
-              onMouseEnter={e => { e.target.style.color='var(--text-2)'; e.target.style.borderColor='var(--border-med)'; }}
-              onMouseLeave={e => { e.target.style.color='var(--text-3)'; e.target.style.borderColor='var(--border)'; }}
-            >
-              @{pol.twitter_handle} ↗
-            </a>
-          )}
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
+          {pol.url && <a href={pol.url} target="_blank" rel="noreferrer" style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', border: '1px solid var(--border-med)', borderRadius: 'var(--radius)', padding: '7px 14px', transition: 'all var(--transition)' }} onMouseEnter={e=>{e.target.style.background='var(--text)';e.target.style.color='var(--bg-2)'}} onMouseLeave={e=>{e.target.style.background='transparent';e.target.style.color='var(--text-2)'}}>Official site ↗</a>}
         </div>
       </header>
 
-      {/* Two-column layout */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1.1fr) minmax(0, 1fr)',
-        gap: '1.5rem',
-        alignItems: 'start',
-      }}>
+      {/* Two column */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.15fr) minmax(0,1fr)', gap: '1.25rem', alignItems: 'start' }}>
 
-        {/* Left: Vote history */}
+        {/* LEFT: Vote history */}
         <section>
-          <SectionLabel>Vote history · {voteTotal.toLocaleString()} total</SectionLabel>
+          <SectionLabel>Vote history · {allVotes.length} loaded · {filteredVotes.length} shown</SectionLabel>
+          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: 'var(--shadow)' }}>
 
-          {voteLoad ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-3)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-              Loading votes…
+            {/* Filters toolbar */}
+            <div style={{ padding: '.75rem 1.25rem', borderBottom: '1px solid var(--border)', background: 'var(--bg)', display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
+              <input
+                placeholder="Search bills…" value={search}
+                onChange={e => handleFilterChange(setSearch)(e.target.value)}
+                style={{ flex: 1, minWidth: 140, fontSize: 12, fontFamily: 'var(--font-mono)', border: '1px solid var(--border-med)', borderRadius: 'var(--radius)', padding: '5px 10px', background: 'var(--bg-2)', outline: 'none' }}
+              />
+              <select value={posFilter} onChange={e => handleFilterChange(setPosFilter)(e.target.value)} style={{ fontSize: 12, fontFamily: 'var(--font-mono)', border: '1px solid var(--border-med)', borderRadius: 'var(--radius)', padding: '5px 8px', background: 'var(--bg-2)', outline: 'none', cursor: 'pointer' }}>
+                <option value="">All votes</option>
+                <option value="Yes">YEA only</option>
+                <option value="No">NAY only</option>
+                <option value="Not Voting">Abstain only</option>
+              </select>
+              <select value={subFilter} onChange={e => handleFilterChange(setSubFilter)(e.target.value)} style={{ fontSize: 12, fontFamily: 'var(--font-mono)', border: '1px solid var(--border-med)', borderRadius: 'var(--radius)', padding: '5px 8px', background: 'var(--bg-2)', outline: 'none', cursor: 'pointer' }}>
+                {SUBJECTS.map(s => <option key={s} value={s}>{s || 'All subjects'}</option>)}
+              </select>
             </div>
-          ) : (
-            <div style={{
-              background: 'var(--bg-2)', border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-lg)', overflow: 'hidden',
-            }}>
-              {votes.map((vote, i) => (
-                <VoteRow key={vote.id} vote={vote} index={i} />
-              ))}
 
-              {votes.length === 0 && (
-                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
-                  No votes found.
-                </div>
-              )}
-
-              {/* Pagination */}
-              {votePages > 1 && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '12px 16px', borderTop: '1px solid var(--border)',
-                }}>
-                  <button
-                    disabled={votePage === 0}
-                    onClick={() => setVotePage(p => Math.max(0, p - 1))}
-                    style={{
-                      fontSize: 11, fontFamily: 'var(--font-mono)',
-                      color: votePage === 0 ? 'var(--text-3)' : 'var(--text-2)',
-                      opacity: votePage === 0 ? 0.4 : 1,
-                      padding: '5px 10px', border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius)',
-                    }}
-                  >
-                    ← Prev
-                  </button>
-                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>
-                    Page {votePage + 1} of {votePages}
-                  </span>
-                  <button
-                    disabled={votePage >= votePages - 1}
-                    onClick={() => setVotePage(p => Math.min(votePages - 1, p + 1))}
-                    style={{
-                      fontSize: 11, fontFamily: 'var(--font-mono)',
-                      color: votePage >= votePages - 1 ? 'var(--text-3)' : 'var(--text-2)',
-                      opacity: votePage >= votePages - 1 ? 0.4 : 1,
-                      padding: '5px 10px', border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius)',
-                    }}
-                  >
-                    Next →
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* Right: Bias analysis */}
-        <section>
-          <SectionLabel>Bias analysis</SectionLabel>
-
-          <div style={{
-            background: 'var(--bg-2)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-lg)', overflow: 'hidden',
-          }}>
-            {biases.length > 0 ? (
-              <div style={{ padding: '1.25rem 1.5rem' }}>
-                {(analysis?.overall_summary || pol.ai_analysis?.overall_summary) && (
-                  <p style={{
-                    fontSize: 13, color: 'var(--text-2)', lineHeight: 1.65,
-                    marginBottom: '1.25rem', paddingBottom: '1.25rem',
-                    borderBottom: '1px solid var(--border)',
-                  }}>
-                    {analysis?.overall_summary || pol.ai_analysis?.overall_summary}
+            {/* Vote rows */}
+            {pagedVotes.length === 0 ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>No votes match your filter.</div>
+            ) : pagedVotes.map((vote, i) => (
+              <div key={vote.id || i} style={{
+                display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 1.25rem',
+                borderBottom: '1px solid var(--border)', animation: `fadeIn 0.3s ease ${i * 0.02}s both`,
+              }}>
+                <span style={{
+                  fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 500,
+                  padding: '3px 7px', borderRadius: 3, flexShrink: 0, minWidth: 34,
+                  textAlign: 'center', marginTop: 1,
+                  color: voteColor(vote.position), background: `${voteColor(vote.position)}18`,
+                }}>{voteShort(vote.position)}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    {vote.short_title || vote.title || vote.description || vote.question}
                   </p>
+                  {vote.primary_subject && (
+                    <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', display: 'block', marginTop: 3 }}>{vote.primary_subject}</span>
+                  )}
+                </div>
+                {vote.vote_date && (
+                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    {new Date(vote.vote_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                  </span>
                 )}
-                {biases.map((bias, i) => (
-                  <BiasBar key={bias.category} bias={bias} delay={i * 0.05} />
-                ))}
-                <button
-                  onClick={runAnalysis}
-                  disabled={analyzing}
-                  style={{
-                    marginTop: '1rem', fontSize: 11, fontFamily: 'var(--font-mono)',
-                    color: 'var(--text-3)', padding: '6px 12px',
-                    border: '1px solid var(--border)', borderRadius: 'var(--radius)',
-                    transition: 'all var(--transition)',
-                    opacity: analyzing ? 0.5 : 1,
-                  }}
-                  onMouseEnter={e => { if (!analyzing) { e.target.style.color='var(--text-2)'; e.target.style.borderColor='var(--border-med)'; }}}
-                  onMouseLeave={e => { e.target.style.color='var(--text-3)'; e.target.style.borderColor='var(--border)'; }}
-                >
-                  {analyzing ? '◌ Re-analyzing…' : '↺ Refresh analysis'}
-                </button>
               </div>
-            ) : (
-              <div style={{ padding: '2rem 1.5rem', textAlign: 'center' }}>
-                <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: '1.25rem', lineHeight: 1.6 }}>
-                  {pol.total_votes > 0
-                    ? `${pol.total_votes.toLocaleString()} votes on record — ready for analysis.`
-                    : 'Vote data syncing…'}
-                </p>
-                {pol.total_votes > 0 && (
-                  <button
-                    onClick={runAnalysis}
-                    disabled={analyzing}
-                    style={{
-                      fontSize: 13, fontFamily: 'var(--font-mono)',
-                      color: analyzing ? 'var(--text-3)' : 'var(--text)',
-                      border: '1px solid var(--border-med)', borderRadius: 'var(--radius)',
-                      padding: '10px 20px', transition: 'all var(--transition)',
-                      opacity: analyzing ? 0.6 : 1,
-                    }}
-                    onMouseEnter={e => { if (!analyzing) { e.target.style.borderColor='var(--border-hi)'; }}}
-                    onMouseLeave={e => { e.target.style.borderColor='var(--border-med)'; }}
-                  >
-                    {analyzing ? '◌ Analyzing with Claude…' : '◎ Run bias analysis'}
-                  </button>
-                )}
+            ))}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.75rem 1.25rem', borderTop: '1px solid var(--border)', background: 'var(--bg)' }}>
+                <button disabled={votePage === 0} onClick={() => setVotePage(p => p - 1)} style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', border: '1px solid var(--border-med)', borderRadius: 'var(--radius)', padding: '5px 11px', transition: 'all var(--transition)', opacity: votePage === 0 ? .35 : 1 }}
+                  onMouseEnter={e=>{if(votePage>0){e.target.style.background='var(--text)';e.target.style.color='var(--bg-2)'}}}
+                  onMouseLeave={e=>{e.target.style.background='transparent';e.target.style.color='var(--text-2)'}}
+                >← Prev</button>
+                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>
+                  {votePage * VOTES_PER_PAGE + 1}–{Math.min((votePage + 1) * VOTES_PER_PAGE, filteredVotes.length)} of {filteredVotes.length}
+                </span>
+                <button disabled={votePage >= totalPages - 1} onClick={() => setVotePage(p => p + 1)} style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', border: '1px solid var(--border-med)', borderRadius: 'var(--radius)', padding: '5px 11px', transition: 'all var(--transition)', opacity: votePage >= totalPages - 1 ? .35 : 1 }}
+                  onMouseEnter={e=>{if(votePage<totalPages-1){e.target.style.background='var(--text)';e.target.style.color='var(--bg-2)'}}}
+                  onMouseLeave={e=>{e.target.style.background='transparent';e.target.style.color='var(--text-2)'}}
+                >Next →</button>
               </div>
             )}
           </div>
+        </section>
 
-          {/* DW-NOMINATE score card */}
-          {pol.dw_nominate != null && (
-            <div style={{
-              marginTop: '1rem',
-              background: 'var(--bg-2)', border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-lg)', padding: '1.25rem 1.5rem',
-            }}>
-              <p style={{
-                fontSize: 10, fontFamily: 'var(--font-mono)',
-                color: 'var(--text-3)', letterSpacing: '0.1em',
-                textTransform: 'uppercase', marginBottom: 12,
-              }}>
-                DW-NOMINATE ideology score
-              </p>
-              <IdeologyMeter score={pol.dw_nominate} />
-              <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 10, lineHeight: 1.5 }}>
-                Political science metric: −1.0 = most liberal, +1.0 = most conservative. Based on lifetime voting record.
-              </p>
+        {/* RIGHT: Analysis */}
+        <section style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+          {/* Standard biases */}
+          <SectionLabel>Voting pattern analysis</SectionLabel>
+          <Panel title="Issue positions">
+            <div style={{ padding: '1.125rem 1.25rem 0' }}>
+              {(analysis?.overall_summary || pol.ai_analysis?.overall_summary) && (
+                <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.65, marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
+                  {analysis?.overall_summary || pol.ai_analysis?.overall_summary}
+                </p>
+              )}
+              {standardBiases.length > 0
+                ? standardBiases.map((b, i) => <BiasBar key={b.category} bias={b} delay={i * 0.05} />)
+                : <AnalysisPrompt totalVotes={pol.total_votes} analyzing={analyzing} onRun={runAnalysis} />
+              }
             </div>
+          </Panel>
+
+          {/* Corruption */}
+          {corruptionBiases.length > 0 && (
+            <Panel title="⚑ Lobbying & corruption indicators" titleColor="var(--gold)" headerBg="var(--gold-dim)">
+              <div style={{ padding: '.875rem 1.25rem 0' }}>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginBottom: '.875rem', lineHeight: 1.5 }}>
+                  Correlation between voting record and major industry donor positions.
+                </p>
+                {corruptionBiases.map((b, i) => <BiasBar key={b.category} bias={b} delay={i * 0.05} />)}
+              </div>
+            </Panel>
+          )}
+
+          {/* Foreign influence */}
+          {foreignBiases.length > 0 && (
+            <Panel title="◈ Foreign influence indicators" titleColor="var(--orange)" headerBg="var(--orange-dim)">
+              <div style={{ padding: '.875rem 1.25rem 0' }}>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginBottom: '.875rem', lineHeight: 1.5 }}>
+                  Voting alignment with positions benefiting specific foreign governments.
+                </p>
+                {foreignBiases.map((b, i) => <BiasBar key={b.category} bias={b} delay={i * 0.05} />)}
+              </div>
+            </Panel>
+          )}
+
+          {/* Run/refresh analysis button */}
+          {biases.length > 0 && (
+            <button onClick={runAnalysis} disabled={analyzing} style={{
+              fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-2)',
+              border: '1px solid var(--border-med)', borderRadius: 'var(--radius)',
+              padding: '8px 14px', transition: 'all var(--transition)', opacity: analyzing ? .5 : 1,
+              alignSelf: 'flex-start',
+            }}>
+              {analyzing ? '◌ Re-analyzing…' : '↺ Refresh analysis'}
+            </button>
+          )}
+
+          {/* Ideology meter */}
+          {dw != null && (
+            <Panel title="DW-NOMINATE ideology score">
+              <div style={{ padding: '1.125rem 1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontFamily: 'var(--font-mono)', marginBottom: 6 }}>
+                  <span style={{ color: 'var(--blue)' }}>← Liberal</span>
+                  <span style={{ color: 'var(--text-3)' }}>Political science metric</span>
+                  <span style={{ color: 'var(--red)' }}>Conservative →</span>
+                </div>
+                <div style={{ height: 4, background: 'var(--bg-3)', borderRadius: 2, position: 'relative', marginBottom: '.5rem' }}>
+                  <div style={{ position: 'absolute', left: '50%', top: -3, width: 1, height: 10, background: 'var(--border-med)' }} />
+                  <div style={{ position: 'absolute', top: '50%', left: `${dwPct}%`, transform: 'translate(-50%,-50%)', width: 11, height: 11, borderRadius: '50%', background: dwColor, border: '2px solid var(--bg-2)', boxShadow: 'var(--shadow)' }} />
+                </div>
+                <div style={{ textAlign: 'center', fontSize: 14, fontFamily: 'var(--font-mono)', fontWeight: 500, color: dwColor, marginTop: '.5rem' }}>
+                  {dw > 0 ? '+' : ''}{dw.toFixed(2)}
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: '.625rem', lineHeight: 1.5 }}>
+                  Based on lifetime voting record. −1.0 = most liberal, +1.0 = most conservative.
+                </p>
+              </div>
+            </Panel>
           )}
         </section>
+      </div>
+
+      <div style={{ marginTop: '3rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)', display: 'flex', flexWrap: 'wrap', gap: 16, justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>Vote data: ProPublica · Analysis: Claude AI · Ideology: DW-NOMINATE</span>
+        <Link to="/reps" style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', border: '1px solid var(--border-med)', borderRadius: 'var(--radius)', padding: '5px 10px' }}>← Back</Link>
       </div>
     </main>
   );
 }
 
-function VoteRow({ vote, index }) {
-  const position = vote.position || 'Not Voting';
-  const color = VOTE_COLOR[position] || 'var(--text-3)';
-  const short = VOTE_SHORT[position] || '—';
-  const title = vote.short_title || vote.title || vote.description || vote.question || 'Unknown bill';
-  const dateStr = vote.vote_date ? new Date(vote.vote_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-
+function Panel({ title, titleColor, headerBg, children }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'flex-start', gap: 12,
-      padding: '12px 16px',
-      borderBottom: '1px solid var(--border)',
-      animation: `fadeUp 0.3s ease ${index * 0.03}s both`,
-    }}>
-      <span style={{
-        fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 500,
-        color, background: `${color}18`,
-        padding: '3px 8px', borderRadius: 3,
-        flexShrink: 0, marginTop: 1, minWidth: 36, textAlign: 'center',
-      }}>
-        {short}
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{
-          fontSize: 13, color: 'var(--text)', lineHeight: 1.4,
-          overflow: 'hidden', textOverflow: 'ellipsis',
-          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-        }}>
-          {title}
-        </p>
-        {vote.primary_subject && (
-          <span style={{
-            fontSize: 10, fontFamily: 'var(--font-mono)',
-            color: 'var(--text-3)', marginTop: 3, display: 'block',
-          }}>
-            {vote.primary_subject}
-          </span>
-        )}
+    <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: 'var(--shadow)' }}>
+      <div style={{ padding: '.875rem 1.25rem', borderBottom: '1px solid var(--border)', background: headerBg || 'var(--bg)' }}>
+        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '.12em', textTransform: 'uppercase', color: titleColor || 'var(--text-3)' }}>{title}</span>
       </div>
-      {dateStr && (
-        <span style={{
-          fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)',
-          flexShrink: 0, whiteSpace: 'nowrap',
-        }}>
-          {dateStr}
-        </span>
-      )}
+      {children}
     </div>
   );
 }
 
-function IdeologyMeter({ score }) {
-  // score is -1.0 to +1.0; map to 0-100%
-  const pct = ((score + 1) / 2) * 100;
-  const isLiberal = score < -0.1;
-  const isConservative = score > 0.1;
-  const color = isLiberal ? 'var(--party-d)' : isConservative ? 'var(--party-r)' : 'var(--amber)';
-
+function AnalysisPrompt({ totalVotes, analyzing, onRun }) {
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--party-d)' }}>Liberal</span>
-        <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', fontWeight: 500, color }}>
-          {score > 0 ? '+' : ''}{score.toFixed(2)}
-        </span>
-        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--party-r)' }}>Conservative</span>
-      </div>
-      <div style={{ height: 4, background: 'var(--bg-4)', borderRadius: 2, position: 'relative' }}>
-        {/* Center line */}
-        <div style={{
-          position: 'absolute', left: '50%', top: -2, width: 1, height: 8,
-          background: 'var(--border-med)',
-        }} />
-        {/* Score dot */}
-        <div style={{
-          position: 'absolute', top: '50%', left: `${pct}%`,
-          transform: 'translate(-50%, -50%)',
-          width: 10, height: 10, borderRadius: '50%',
-          background: color, border: '2px solid var(--bg-2)',
-        }} />
-        {/* Left fill */}
-        <div style={{
-          position: 'absolute', left: 0, top: 0, bottom: 0,
-          width: `${Math.min(pct, 50)}%`,
-          background: pct < 50 ? 'var(--party-d)' : 'transparent',
-          opacity: 0.4, borderRadius: 2,
-        }} />
-        <div style={{
-          position: 'absolute', left: '50%', top: 0, bottom: 0,
-          width: `${Math.max(pct - 50, 0)}%`,
-          background: pct > 50 ? 'var(--party-r)' : 'transparent',
-          opacity: 0.4, borderRadius: 2,
-        }} />
-      </div>
+    <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+      <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: '1rem' }}>
+        {totalVotes > 0 ? `${totalVotes.toLocaleString()} votes on record — ready for analysis.` : 'Vote data syncing…'}
+      </p>
+      {totalVotes > 0 && (
+        <button onClick={onRun} disabled={analyzing} style={{
+          fontSize: 13, fontFamily: 'var(--font-mono)', color: analyzing ? 'var(--text-3)' : 'var(--text)',
+          border: '1px solid var(--border-med)', borderRadius: 'var(--radius)', padding: '10px 20px',
+          transition: 'all var(--transition)', opacity: analyzing ? .6 : 1,
+        }}>
+          {analyzing ? '◌ Analyzing with Claude…' : '◎ Run bias analysis'}
+        </button>
+      )}
     </div>
   );
 }
 
 function SectionLabel({ children }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem',
-    }}>
-      <span style={{
-        fontSize: 10, fontFamily: 'var(--font-mono)',
-        color: 'var(--text-3)', letterSpacing: '0.12em',
-        textTransform: 'uppercase', whiteSpace: 'nowrap',
-      }}>
-        {children}
-      </span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '.75rem' }}>
+      <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', letterSpacing: '.12em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{children}</span>
       <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
     </div>
   );
