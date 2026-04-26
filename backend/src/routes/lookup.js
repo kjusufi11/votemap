@@ -139,3 +139,23 @@ function extractDistrict(reps) {
 }
 
 module.exports = router;
+
+// GET /api/lookup/test-civic?zip=10001 — debug endpoint
+router.get('/test-civic', async (req, res) => {
+  const { zip } = req.query;
+  if (!zip) return res.status(400).json({ error: 'Pass ?zip=10001' });
+  try {
+    const axios = require('axios');
+    const { data } = await axios.get('https://www.googleapis.com/civicinfo/v2/representatives', {
+      params: { key: process.env.GOOGLE_CIVIC_API_KEY, address: zip },
+    });
+    res.json({
+      normalizedInput: data.normalizedInput,
+      officeCount: data.offices?.length,
+      officialCount: data.officials?.length,
+      offices: data.offices?.map(o => ({ name: o.name, levels: o.levels, roles: o.roles })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data || err.message });
+  }
+});
