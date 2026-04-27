@@ -1,4 +1,4 @@
-// scripts/seedMembers.js - Fixed version
+// scripts/seedMembers.js - Final version
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const axios = require('axios');
 const { Pool } = require('pg');
@@ -7,7 +7,6 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const API_KEY = process.env.CONGRESS_API_KEY;
 const BASE = 'https://api.congress.gov/v3';
 
-// Full state name to abbreviation
 const STATE_ABBR = {
   'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR','California':'CA',
   'Colorado':'CO','Connecticut':'CT','Delaware':'DE','Florida':'FL','Georgia':'GA',
@@ -26,14 +25,14 @@ const STATE_ABBR = {
 async function fetchAllMembers() {
   const all = [];
   let offset = 0;
-  console.log('Fetching all current members of Congress...');
+  console.log('Fetching all current members...');
   while (true) {
     const { data } = await axios.get(`${BASE}/member`, {
       params: { api_key: API_KEY, format: 'json', limit: 250, offset, currentMember: true },
     });
     const members = data.members || [];
     all.push(...members);
-    console.log(`  Fetched ${all.length} so far...`);
+    console.log(`  Fetched ${all.length}...`);
     if (members.length < 250) break;
     offset += 250;
     await sleep(500);
@@ -41,9 +40,20 @@ async function fetchAllMembers() {
   return all;
 }
 
+// Fetch individual member to get party data (list endpoint doesn't include it)
+async function fetchMemberDetail(bioguideId) {
+  try {
+    const { data } = await axios.get(`${BASE}/member/${bioguideId}`, {
+      params: { api_key: API_KEY, format: 'json' },
+    });
+    return data.member;
+  } catch {
+    return null;
+  }
+}
+
 function parseName(m) {
-  // Congress.gov returns "LastName, FirstName" format
-  const raw = m.name || '';
+  const raw = m.invertedOrderName || m.name || '';
   if (raw.includes(',')) {
     const [last, first] = raw.split(',').map(s => s.trim());
     return { full: `${first} ${last}`, first, last };
@@ -60,19 +70,24 @@ function normalizeState(state) {
 
 function normalizeParty(p) {
   if (!p) return 'I';
-  if (p === 'D') return 'D';
-  if (p === 'R') return 'R';
+  const upper = p.toUpperCase();
+  if (upper === 'D' || upper.includes('DEMOCRAT')) return 'D';
+  if (upper === 'R' || upper.includes('REPUBLICAN')) return 'R';
   return 'I';
 }
 
-async function upsert(m) {
+async function upsert(m, detail) {
   const { full, first, last } = parseName(m);
-  const terms = m.terms?.item || [];
+  const terms = m.terms?.item || detail?.terms?.item || [];
   const lastTerm = terms[terms.length - 1] || {};
   const chamberRaw = lastTerm.chamber || '';
   const chamber = chamberRaw.toLowerCase().includes('senate') ? 'senate' : 'house';
   const state = normalizeState(m.state || lastTerm.stateCode);
-  const party = normalizeParty(m.partyHistory?.[m.partyHistory.length-1]?.partyAbbreviation);
+
+  // Party: try detail partyHistory first, then list-level fields
+  const partyHistory = detail?.partyHistory || [];
+  const latestParty = partyHistory[partyHistory.length - 1]?.partyAbbreviation;
+  const party = normalizeParty(latestParty || m.partyName || m.party);
 
   await pool.query(`
     INSERT INTO politicians
@@ -88,14 +103,14 @@ async function upsert(m) {
     lastTerm.district || null,
     chamber === 'senate' ? 'Sen.' : 'Rep.',
     true,
-    m.officialWebsiteUrl || null,
+    m.officialWebsiteUrl || detail?.officialWebsiteUrl || null,
   ]);
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function run() {
-  console.log('\nVoteMap — Member Seed Script (Fixed)\n');
+  console.log('\nVoteMap — Member Seed Script (Final)\n');
 
   if (!API_KEY || API_KEY.includes('your_')) {
     console.error('ERROR: CONGRESS_API_KEY not set'); process.exit(1);
@@ -105,17 +120,28 @@ async function run() {
   }
 
   const members = await fetchAllMembers();
-  console.log(`\nGot ${members.length} — saving...`);
+  console.log(`\nGot ${members.length} — fetching details and saving...`);
+  console.log('(This takes ~10 minutes due to individual API calls)\n');
 
   let saved = 0, skipped = 0;
   for (const m of members) {
-    try { await upsert(m); saved++; process.stdout.write('.'); }
-    catch (e) { skipped++; process.stdout.write('x'); }
+    try {
+      // Fetch individual detail to get party data
+      const detail = await fetchMemberDetail(m.bioguideId);
+      await upsert(m, detail);
+      saved++;
+      process.stdout.write('.');
+      await sleep(200); // Rate limit: ~5 req/sec
+    } catch (e) {
+      skipped++;
+      process.stdout.write('x');
+    }
   }
 
-  const { rows } = await pool.query("SELECT COUNT(*) FROM politicians WHERE state = 'NY'");
-  console.log(`\n\nDone! Saved: ${saved}, Skipped: ${skipped}`);
-  console.log(`NY politicians: ${rows[0].count}`);
+  const { rows } = await pool.query("SELECT party, COUNT(*) FROM politicians GROUP BY party ORDER BY party");
+  console.log('\n\nParty breakdown:');
+  rows.forEach(r => console.log(` ${r.party}: ${r.count}`));
+  console.log(`\nDone! Saved: ${saved}, Skipped: ${skipped}`);
   await pool.end();
 }
 
