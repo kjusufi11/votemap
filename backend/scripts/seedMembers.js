@@ -72,7 +72,7 @@ async function upsert(m) {
   const chamberRaw = lastTerm.chamber || '';
   const chamber = chamberRaw.toLowerCase().includes('senate') ? 'senate' : 'house';
   const state = normalizeState(m.state || lastTerm.stateCode);
-  const party = normalizeParty(m.partyHistory?.[0]?.partyAbbreviation);
+  const party = normalizeParty(m.partyHistory?.[m.partyHistory.length-1]?.partyAbbreviation);
 
   await pool.query(`
     INSERT INTO politicians
