@@ -152,7 +152,8 @@ Respond ONLY with valid JSON, no preamble, no markdown, no code fences. Exactly 
     messages: [{ role: 'user', content: prompt }],
   });
 
-  const text = response.content[0].text.trim();
+  let text = response.content[0].text.trim();
+  text = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
 
   try {
     const parsed = JSON.parse(text);
