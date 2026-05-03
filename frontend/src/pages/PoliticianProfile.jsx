@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import BiasBar from '../components/BiasBar';
 import { getPolitician, getPoliticianVotes, triggerAnalysis, getErrorMessage } from '../services/api';
+import { classifyVote, getDomain } from '../utils/domainClassifier';
 
 const PC = { D: 'var(--party-d)', R: 'var(--party-r)', I: 'var(--party-i)' };
 const PD = { D: 'var(--party-d-dim)', R: 'var(--party-r-dim)', I: 'var(--party-i-dim)' };
@@ -212,9 +213,14 @@ export default function PoliticianProfile() {
                   <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                     {vote.short_title || vote.title || vote.description || vote.question}
                   </p>
-                  {vote.primary_subject && (
-                    <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', display: 'block', marginTop: 3 }}>{vote.primary_subject}</span>
-                  )}
+                  {(() => {
+                    const domainKey = classifyVote(vote);
+                    const d = domainKey ? getDomain(domainKey) : null;
+                    const label = d ? `${d.icon} ${d.label}` : vote.primary_subject;
+                    return label ? (
+                      <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', display: 'block', marginTop: 3 }}>{label}</span>
+                    ) : null;
+                  })()}
                 </div>
                 {vote.vote_date && (
                   <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', flexShrink: 0, whiteSpace: 'nowrap' }}>
