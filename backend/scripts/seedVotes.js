@@ -103,7 +103,7 @@ async function saveVote(politicianId, vote) {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function run() {
-  console.log('\nVoteMap — Vote Seed Script');
+  console.log('\nVoteMatch — Vote Seed Script');
   console.log('==========================\n');
 
   if (!API_KEY || API_KEY.includes('your_')) {

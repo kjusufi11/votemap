@@ -1,6 +1,6 @@
 // src/db/migrate.js
 // Run with: npm run db:migrate
-// Creates all VoteMap tables from scratch
+// Creates all VoteMatch tables from scratch
 
 const { Pool } = require('pg');
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });

@@ -1,7 +1,7 @@
 {
-  "name": "votemap-backend",
+  "name": "votematch-backend",
   "version": "1.0.0",
-  "description": "VoteMap API server",
+  "description": "VoteMatch API server",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",

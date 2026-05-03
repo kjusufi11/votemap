@@ -1,4 +1,4 @@
-# VoteMap
+# VoteMatch
 
 Track how politicians vote. Surface their real ideological biases with AI.
 
@@ -45,11 +45,11 @@ User enters ZIP
 # Mac
 brew install postgresql
 brew services start postgresql
-createdb votemap
+createdb votematch
 
 # Ubuntu
 sudo apt install postgresql
-sudo -u postgres createdb votemap
+sudo -u postgres createdb votematch
 ```
 
 ### 3. Backend

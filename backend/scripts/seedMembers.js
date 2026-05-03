@@ -110,7 +110,7 @@ async function upsert(m, detail) {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function run() {
-  console.log('\nVoteMap — Member Seed Script (Final)\n');
+  console.log('\nVoteMatch — Member Seed Script (Final)\n');
 
   if (!API_KEY || API_KEY.includes('your_')) {
     console.error('ERROR: CONGRESS_API_KEY not set'); process.exit(1);

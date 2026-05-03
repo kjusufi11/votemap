@@ -4,7 +4,7 @@ const { Pool } = require('pg');
 // Only use mock/noop if explicitly set OR no database URL at all
 const isMock = process.env.MOCK_MODE === 'true' ||
   !process.env.DATABASE_URL ||
-  process.env.DATABASE_URL === 'postgresql://localhost:5432/votemap';
+  process.env.DATABASE_URL === 'postgresql://localhost:5432/votematch';
 
 let pool = null;
 

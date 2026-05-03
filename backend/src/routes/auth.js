@@ -5,7 +5,7 @@ const router  = express.Router();
 const crypto  = require('crypto');
 const db      = require('../db');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'votemap-dev-secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'votematch-dev-secret';
 
 // Simple JWT implementation using built-in crypto
 function createToken(payload) {

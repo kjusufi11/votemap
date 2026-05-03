@@ -17,7 +17,7 @@ app.set('trust proxy', 1);
 
 // CORS
 const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? [process.env.FRONTEND_URL, /\.railway\.app$/].filter(Boolean)
+  ? [process.env.FRONTEND_URL, /\.railway\.app$/, /votematch\.app$/].filter(Boolean)
   : ['http://localhost:3000', 'http://localhost:5173'];
 
 app.use(cors({
@@ -68,7 +68,7 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\nVoteMap API running on http://localhost:${PORT}`);
+  console.log(`\nVoteMatch API running on http://localhost:${PORT}`);
   const missing = ['CONGRESS_API_KEY', 'GOOGLE_CIVIC_API_KEY', 'ANTHROPIC_API_KEY']
     .filter(k => !process.env[k] || process.env[k].startsWith('your_'));
   if (missing.length) {

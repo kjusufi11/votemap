@@ -95,7 +95,7 @@ async function processVote(xml, rollNum) {
 }
 
 async function run() {
-  console.log('\nVoteMap - House Vote Seed Script (Fixed)');
+  console.log('\nVoteMatch - House Vote Seed Script (Fixed)');
   console.log('==========================================\n');
 
   if (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes('localhost')) {

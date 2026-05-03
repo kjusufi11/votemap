@@ -1,4 +1,4 @@
-# VoteMap — Deployment Guide
+# VoteMatch — Deployment Guide
 ## GitHub → Railway, from zero
 
 ---
@@ -27,7 +27,7 @@ Open a terminal in the `votemap` folder and run these commands one at a time:
 ```bash
 git init
 git add .
-git commit -m "Initial commit — VoteMap"
+git commit -m "Initial commit — VoteMatch"
 git branch -M main
 git remote add origin https://github.com/YOUR_USERNAME/votemap.git
 git push -u origin main
@@ -149,7 +149,7 @@ Your database needs its tables created once. Do this in Railway:
 ## Step 11 — Set up the nightly cron job
 
 1. In your Railway project, click **New Service → Empty Service**
-2. Name it `votemap-cron`
+2. Name it `votematch-cron`
 3. Connect it to your `votemap` GitHub repo
 4. Set **Root Directory** to `/backend`
 5. Under **Settings → Deploy**:
@@ -162,12 +162,12 @@ Your database needs its tables created once. Do this in Railway:
 ## Step 12 — Get your live URLs
 
 1. Click your **Backend** service → **Settings → Networking → Generate Domain**
-   - Copy this URL (e.g. `votemap-backend.up.railway.app`)
+   - Copy this URL (e.g. `votematch-api.up.railway.app`)
 2. Click your **Frontend** service → **Settings → Networking → Generate Domain**
    - This is your live app URL
 
 3. Go back to the **Frontend** service → **Variables**
-4. Set `VITE_API_URL` to `https://votemap-backend.up.railway.app/api`
+4. Set `VITE_API_URL` to `https://api.votematch.app/api`
 5. Redeploy the frontend
 
 ---

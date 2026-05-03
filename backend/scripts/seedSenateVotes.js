@@ -160,7 +160,7 @@ async function findMaxVote() {
 }
 
 async function run() {
-  console.log('\nVoteMap — Senate Vote Seed Script');
+  console.log('\nVoteMatch — Senate Vote Seed Script');
   console.log('==================================\n');
 
   if (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes('localhost')) {
