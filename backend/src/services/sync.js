@@ -52,6 +52,13 @@ async function syncSingleMember(bioguideId) {
   } catch (err) {
     console.warn(`Could not sync votes for ${bioguideId}:`, err.message);
   }
+
+  // Recalculate stats from the votes now in the DB
+  try {
+    await updatePoliticianStats(bioguideId);
+  } catch (err) {
+    console.warn(`Could not update stats for ${bioguideId}:`, err.message);
+  }
 }
 
 // ── Sync votes for a politician ───────────────────────────────────────────────
@@ -134,23 +141,109 @@ async function syncRepresentatives(state, district) {
 }
 
 // ── Upsert member to DB ───────────────────────────────────────────────────────
+// Note: total_votes / missed_votes_pct / party_loyalty_pct are intentionally
+// omitted from the ON CONFLICT update — they are managed by updatePoliticianStats()
+// which calculates them from the votes table after each vote sync.
 
 async function upsertMember(m) {
   await db.query(`
     INSERT INTO politicians (
       id, full_name, first_name, last_name, party, state, chamber, district,
       title, in_office, url, total_votes, missed_votes_pct, party_loyalty_pct, last_synced
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW())
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,0,0,NOW())
     ON CONFLICT (id) DO UPDATE SET
-      full_name=$2, party=$5, in_office=$10, url=$11,
-      total_votes=$12, missed_votes_pct=$13, party_loyalty_pct=$14,
+      full_name=$2, first_name=$3, last_name=$4,
+      party=$5, state=$6, chamber=$7, district=$8,
+      title=$9, in_office=$10, url=$11,
       last_synced=NOW()
   `, [
     m.id, m.full_name, m.first_name, m.last_name,
     m.party, m.state, m.chamber, m.district,
     m.title, m.in_office, m.url,
-    m.total_votes || 0, m.missed_votes_pct || 0, m.party_loyalty_pct || 0,
   ]);
+}
+
+// ── Calculate stats from votes table ─────────────────────────────────────────
+// Called after vote sync so the politicians row has accurate numbers.
+
+async function updatePoliticianStats(bioguideId) {
+  // Total votes cast and abstentions
+  const countResult = await db.query(`
+    SELECT
+      COUNT(*)                                         AS total_votes,
+      COUNT(*) FILTER (WHERE position = 'Not Voting') AS not_voting
+    FROM votes
+    WHERE politician_id = $1
+  `, [bioguideId]);
+
+  const totalVotes = parseInt(countResult.rows[0].total_votes) || 0;
+  const notVoting  = parseInt(countResult.rows[0].not_voting)  || 0;
+  const missedPct  = totalVotes > 0 ? Math.round((notVoting / totalVotes) * 100) : 0;
+
+  // Party loyalty: compare this politician's Yes/No votes against the majority
+  // position of other same-party members on the same roll calls.
+  // Requires at least some other party members to have been synced.
+  const loyaltyResult = await db.query(`
+    WITH pol_party AS (
+      SELECT party FROM politicians WHERE id = $1
+    ),
+    pol_votes AS (
+      SELECT vote_id, position
+      FROM votes
+      WHERE politician_id = $1 AND position IN ('Yes', 'No')
+    ),
+    other_party_votes AS (
+      SELECT v.vote_id, v.position
+      FROM votes v
+      JOIN politicians p ON p.id = v.politician_id
+      WHERE p.party = (SELECT party FROM pol_party)
+        AND p.id != $1
+        AND v.position IN ('Yes', 'No')
+        AND v.vote_id IN (SELECT vote_id FROM pol_votes)
+    ),
+    party_majority AS (
+      SELECT
+        vote_id,
+        CASE WHEN COUNT(*) FILTER (WHERE position = 'Yes') >=
+                  COUNT(*) FILTER (WHERE position = 'No')
+        THEN 'Yes' ELSE 'No' END AS majority_pos
+      FROM other_party_votes
+      GROUP BY vote_id
+    )
+    SELECT
+      ROUND(
+        COUNT(*) FILTER (WHERE pv.position = pm.majority_pos) * 100.0
+          / NULLIF(COUNT(*), 0)
+      )::int  AS loyalty_pct,
+      COUNT(*) AS votes_with_data
+    FROM pol_votes pv
+    JOIN party_majority pm ON pm.vote_id = pv.vote_id
+  `, [bioguideId]);
+
+  const loyaltyRow    = loyaltyResult.rows[0];
+  const votesWithData = parseInt(loyaltyRow?.votes_with_data) || 0;
+  const loyaltyPct    = (loyaltyRow?.loyalty_pct != null && votesWithData >= 5)
+    ? parseInt(loyaltyRow.loyalty_pct)
+    : null;
+
+  if (loyaltyPct !== null) {
+    await db.query(`
+      UPDATE politicians SET
+        total_votes       = $2,
+        missed_votes_pct  = $3,
+        party_loyalty_pct = $4
+      WHERE id = $1
+    `, [bioguideId, totalVotes, missedPct, loyaltyPct]);
+  } else {
+    await db.query(`
+      UPDATE politicians SET
+        total_votes      = $2,
+        missed_votes_pct = $3
+      WHERE id = $1
+    `, [bioguideId, totalVotes, missedPct]);
+  }
+
+  return { totalVotes, missedPct, loyaltyPct, votesWithData };
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -160,5 +253,6 @@ module.exports = {
   syncSingleMember,
   syncVotesForPolitician,
   syncRepresentatives,
+  updatePoliticianStats,
   CURRENT_CONGRESS,
 };

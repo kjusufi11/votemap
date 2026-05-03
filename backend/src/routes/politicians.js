@@ -266,8 +266,11 @@ router.post('/:id/sync', async (req, res) => {
   const { id } = req.params;
   try {
     await sync.syncSingleMember(id);
+    // Always recalculate stats from votes currently in DB,
+    // even if syncSingleMember skipped due to the 24 h cache.
+    const stats = await sync.updatePoliticianStats(id);
     const voteCount = await db.query('SELECT COUNT(*) FROM votes WHERE politician_id = $1', [id]);
-    res.json({ success: true, votes: parseInt(voteCount.rows[0].count) });
+    res.json({ success: true, votes: parseInt(voteCount.rows[0].count), stats });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
