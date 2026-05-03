@@ -61,7 +61,7 @@ export default function Nav() {
             <SignInButton mode="modal">
               <button style={{
                 fontSize: 12, fontFamily: 'var(--font-mono)',
-                color: 'var(--text)', padding: '5px 14px',
+                padding: '5px 14px',
                 border: '1px solid var(--border-med)', borderRadius: 20,
                 background: 'var(--text)', color: 'var(--bg-2)',
                 cursor: 'pointer', transition: 'all var(--transition)',

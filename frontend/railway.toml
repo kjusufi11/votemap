@@ -5,3 +5,6 @@ buildCommand = "npm install && npm run build"
 [deploy]
 healthcheckPath = "/"
 healthcheckTimeout = 30
+
+[build.nixpacksPlan.variables]
+NODE_VERSION = "20"
