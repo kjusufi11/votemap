@@ -64,8 +64,8 @@ export default function PoliticianProfile() {
       const user = JSON.parse(stored);
       if (!user?.id) return;
       setAlignLoading(true);
-      const API = import.meta.env.VITE_API_URL || 'https://votemap-production.up.railway.app';
-      const token = localStorage.getItem('votemap_token');
+	const API = (import.meta.env.VITE_API_URL || 'https://votemap-production.up.railway.app').replace(/\/api$/, '');      
+	const token = localStorage.getItem('votemap_token');
       const res = await fetch(`${API}/api/politicians/${id}/alignment?userId=${user.id}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
