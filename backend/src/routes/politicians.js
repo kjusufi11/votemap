@@ -29,52 +29,6 @@ router.get('/debug/count', async (req, res) => {
   }
 });
 
-// POST /api/politicians/debug/migrate-vote-ids
-// One-time migration: strip the per-politician bioguide suffix from vote_ids
-// so all politicians share the same vote_id for the same roll call.
-// Old format: senate-119-1-599-M000355  →  New: senate-119-1-599
-router.post('/debug/migrate-vote-ids', async (req, res) => {
-  try {
-    const result = await db.query(`
-      UPDATE votes
-      SET vote_id = REGEXP_REPLACE(vote_id, '-[A-Z][0-9]{6}$', '')
-      WHERE vote_id ~ '-[A-Z][0-9]{6}$'
-    `);
-    res.json({ updated: result.rowCount });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET /api/politicians/debug/votes?id=X — inspect vote_ids in DB
-router.get('/debug/votes', async (req, res) => {
-  const { id } = req.query;
-  if (!id) return res.status(400).json({ error: 'Pass ?id=bioguideId' });
-  try {
-    const sample = await db.query(
-      `SELECT vote_id, position, vote_date FROM votes WHERE politician_id = $1 ORDER BY vote_date DESC LIMIT 10`,
-      [id]
-    );
-    const nullCount = await db.query(
-      `SELECT COUNT(*) FROM votes WHERE politician_id = $1 AND (vote_id IS NULL OR vote_id = '')`,
-      [id]
-    );
-    const overlap = id.includes(',') ? null : await db.query(
-      `SELECT COUNT(*) FROM votes v1
-       JOIN votes v2 ON v1.vote_id = v2.vote_id
-       WHERE v1.politician_id = $1 AND v2.politician_id != $1
-         AND v1.position IN ('Yes','No') AND v2.position IN ('Yes','No')`,
-      [id]
-    );
-    res.json({
-      sample: sample.rows,
-      null_vote_ids: nullCount.rows[0].count,
-      overlapping_with_others: overlap?.rows[0]?.count,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // GET /api/politicians?state=NY&chamber=senate
 router.get('/', async (req, res) => {
