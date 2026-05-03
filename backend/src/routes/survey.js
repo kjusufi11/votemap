@@ -42,3 +42,21 @@ router.post('/:userId', async (req, res) => {
 });
 
 module.exports = router;
+
+// GET /api/survey/:userId/alignment?politicians=id1,id2,id3
+router.get('/:userId/alignment', async (req, res) => {
+  const { userId } = req.params;
+  const { politicians } = req.query;
+
+  if (!politicians) return res.status(400).json({ error: 'Pass ?politicians=id1,id2,id3' });
+
+  try {
+    const { calculateAlignmentForReps } = require('../services/alignmentEngine');
+    const polIds = politicians.split(',').filter(Boolean);
+    const results = await calculateAlignmentForReps(userId, polIds);
+    res.json(results);
+  } catch (err) {
+    console.error('Alignment error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});

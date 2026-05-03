@@ -74,3 +74,14 @@ export async function getSurvey(userId) {
 export function getErrorMessage(err) {
   return err?.response?.data?.error || err?.message || 'Something went wrong.';
 }
+
+export async function getAlignment(userId, politicianIds) {
+  try {
+    const { data } = await api.get(`/survey/${userId}/alignment`, {
+      params: { politicians: politicianIds.join(',') }
+    });
+    return data;
+  } catch {
+    return {};
+  }
+}

@@ -1,16 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import RepresentativeCard from '../components/RepresentativeCard';
+import { getAlignment } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function MyReps() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [data, setData] = useState(null);
+  const [alignment, setAlignment] = useState({});
 
   useEffect(() => {
     const stored = sessionStorage.getItem('votemap_lookup');
     if (stored) { try { setData(JSON.parse(stored)); return; } catch {} }
     navigate('/');
   }, []);
+
+  // Fetch alignment scores when data and user are available
+  useEffect(() => {
+    if (!data || !user) return;
+    const ids = data.representatives
+      ?.filter(r => r.bioguideId)
+      .map(r => r.bioguideId) || [];
+    if (ids.length === 0) return;
+    getAlignment(user.id, ids).then(setAlignment).catch(() => {});
+  }, [data, user]);
 
   if (!data) return <LoadingState />;
 
@@ -64,7 +78,7 @@ export default function MyReps() {
       {federal.length > 0 && (
         <section style={{ marginBottom: '2.5rem' }}>
           <SectionLabel>Federal — U.S. Congress</SectionLabel>
-          {federal.map((rep, i) => <RepresentativeCard key={rep.bioguideId || rep.name} rep={rep} index={i} />)}
+          {federal.map((rep, i) => <RepresentativeCard key={rep.bioguideId || rep.name} rep={rep} index={i} alignment={alignment[rep.bioguideId]} />)}
         </section>
       )}
 
