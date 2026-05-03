@@ -35,10 +35,10 @@ router.get('/', async (req, res) => {
   try {
     const conditions = ['p.in_office = true'];
     const params = [];
-    if (q)       { params.push(`%${q}%`);            conditions.push(`p.full_name ILIKE $${params.length}`); }
-    if (state)   { params.push(state.toUpperCase());  conditions.push(`p.state = $${params.length}`); }
+    if (q)       { params.push(`%${q}%`);             conditions.push(`p.full_name ILIKE $${params.length}`); }
+    if (state)   { params.push(state.toUpperCase());   conditions.push(`p.state = $${params.length}`); }
     if (chamber) { params.push(chamber.toLowerCase()); conditions.push(`p.chamber = $${params.length}`); }
-    if (party)   { params.push(party.toUpperCase());  conditions.push(`p.party = $${params.length}`); }
+    if (party)   { params.push(party.toUpperCase());   conditions.push(`p.party = $${params.length}`); }
 
     const result = await db.query(`
       SELECT id, full_name, party, state, chamber, district, title, total_votes, party_loyalty_pct
@@ -53,42 +53,97 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/politicians/:id
-router.get('/:id', async (req, res) => {
-  const { id } = req.params;
+// ⚠️ All /:id/subroutes MUST come before /:id
 
-  if (mockData.isMockMode()) {
-    const pol = mockData.MOCK_POLITICIANS[id];
-    if (!pol) return res.status(404).json({ error: 'Politician not found.' });
-    return res.json({ ...pol, bias_scores: [] });
+// GET /api/politicians/:id/alignment?userId=123
+router.get('/:id/alignment', async (req, res) => {
+  const { id } = req.params;
+  const { userId } = req.query;
+
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
   }
 
   try {
-    const existing = await db.query('SELECT id FROM politicians WHERE id = $1', [id]);
-    if (!existing.rows.length) {
-      console.log(`[sync] ${id} not in DB — syncing now...`);
-      await sync.syncSingleMember(id);
+    const overall = await calculateAlignment(userId, id);
+    if (!overall) {
+      return res.json({ score: null, breakdown: [], message: 'Complete the values survey to see alignment.' });
     }
 
-    const result = await db.query(`
-      SELECT p.*,
-        COALESCE(
-          json_agg(json_build_object(
-            'category', bs.category, 'label', bs.label, 'score', bs.score,
-            'direction', bs.direction, 'confidence', bs.confidence,
-            'vote_count', bs.vote_count, 'summary', bs.summary
-          ) ORDER BY bs.score DESC) FILTER (WHERE bs.category IS NOT NULL), '[]'
-        ) as bias_scores
-      FROM politicians p
-      LEFT JOIN bias_scores bs ON bs.politician_id = p.id
-      WHERE p.id = $1
-      GROUP BY p.id
+    const votesResult = await db.query(`
+      SELECT v.position, v.description, v.question,
+             b.title, b.short_title, b.primary_subject, b.categories
+      FROM votes v
+      LEFT JOIN bills b ON v.bill_id = b.id
+      WHERE v.politician_id = $1
+      AND v.position NOT IN ('Not Voting', 'Present')
     `, [id]);
 
-    if (!result.rows.length) return res.status(404).json({ error: 'Politician not found.' });
-    res.json(result.rows[0]);
+    const allVotes = votesResult.rows;
+    const domains = getAllDomains();
+
+    const domainVotes = {};
+    for (const vote of allVotes) {
+      const domain = classifyVote(vote);
+      if (!domain) continue;
+      if (!domainVotes[domain]) domainVotes[domain] = { yes: 0, no: 0, total: 0 };
+      const pos = vote.position?.toLowerCase();
+      if (pos === 'yes' || pos === 'yea') domainVotes[domain].yes++;
+      else if (pos === 'no' || pos === 'nay') domainVotes[domain].no++;
+      domainVotes[domain].total++;
+    }
+
+    const surveyResult = await db.query(
+      'SELECT answers FROM user_surveys WHERE user_id = $1',
+      [String(userId)]
+    );
+    const userAnswers = surveyResult.rows[0]?.answers || {};
+
+    const ISSUE_TO_DOMAIN = {
+      healthcare: 'healthcare', climate: 'climate', immigration: 'immigration',
+      gun_policy: 'gun_policy', taxes: 'economy', defense: 'defense',
+      reproductive_rights: 'reproductive_rights', education: 'education',
+      safety_net: 'safety_net', criminal_justice: 'criminal_justice',
+    };
+
+    const PROGRESSIVE_IS_YES = {
+      healthcare: true, climate: true, immigration: false, gun_policy: true,
+      economy: true, defense: false, reproductive_rights: true, education: true,
+      safety_net: true, criminal_justice: false, voting_rights: true, infrastructure: true,
+    };
+
+    const domainBreakdown = [];
+    for (const [domainKey, domainConfig] of Object.entries(domains)) {
+      const votes = domainVotes[domainKey];
+      if (!votes || votes.total < 3) continue;
+      const surveyIssue = Object.entries(ISSUE_TO_DOMAIN).find(([, d]) => d === domainKey)?.[0];
+      const userValue = surveyIssue ? userAnswers[surveyIssue] : null;
+      const progressiveIsYes = PROGRESSIVE_IS_YES[domainKey] ?? true;
+      const politicianProgressiveVotes = progressiveIsYes ? votes.yes : votes.no;
+      const politicianProgressivePct = Math.round((politicianProgressiveVotes / votes.total) * 100);
+      let agreementPct = null;
+      if (userValue !== null && userValue !== undefined) {
+        const userProgressivePct = Math.round(((2 - userValue) / 4) * 100);
+        agreementPct = 100 - Math.abs(userProgressivePct - politicianProgressivePct);
+      }
+      domainBreakdown.push({
+        domain: domainKey, label: domainConfig.label, icon: domainConfig.icon,
+        voteCount: votes.total, politicianProgressivePct, agreementPct,
+        hasUserAnswer: userValue !== null && userValue !== undefined,
+      });
+    }
+
+    domainBreakdown.sort((a, b) => b.voteCount - a.voteCount);
+
+    res.json({
+      score: overall.score,
+      issuesAnalyzed: overall.issuesAnalyzed,
+      breakdown: domainBreakdown,
+      surveyBreakdown: overall.breakdown,
+    });
+
   } catch (err) {
-    console.error(err);
+    console.error('Alignment breakdown error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -134,126 +189,57 @@ router.get('/:id/votes', async (req, res) => {
   }
 });
 
-// GET /api/politicians/:id/alignment?userId=123
-router.get('/:id/alignment', async (req, res) => {
+// GET /api/politicians/:id/analysis
+router.get('/:id/analysis', async (req, res) => {
   const { id } = req.params;
-  const { userId } = req.query;
+  try {
+    const result = await db.query(`
+      SELECT content, computed_at FROM ai_analysis
+      WHERE politician_id = $1 AND analysis_type = 'full_profile'
+    `, [id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'No analysis yet.' });
+    res.json({ analysis: result.rows[0].content, computedAt: result.rows[0].computed_at });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
-  if (!userId) {
-    return res.status(400).json({ error: 'userId is required' });
+// GET /api/politicians/:id — MUST come after all /:id/subroutes
+router.get('/:id', async (req, res) => {
+  const { id } = req.params;
+
+  if (mockData.isMockMode()) {
+    const pol = mockData.MOCK_POLITICIANS[id];
+    if (!pol) return res.status(404).json({ error: 'Politician not found.' });
+    return res.json({ ...pol, bias_scores: [] });
   }
 
   try {
-    // Overall alignment score from existing engine
-    const overall = await calculateAlignment(userId, id);
-    if (!overall) {
-      return res.json({ score: null, breakdown: [], message: 'Complete the values survey to see alignment.' });
+    const existing = await db.query('SELECT id FROM politicians WHERE id = $1', [id]);
+    if (!existing.rows.length) {
+      console.log(`[sync] ${id} not in DB — syncing now...`);
+      await sync.syncSingleMember(id);
     }
 
-    // All votes for this politician
-    const votesResult = await db.query(`
-      SELECT v.position, v.description, v.question,
-             b.title, b.short_title, b.primary_subject, b.categories
-      FROM votes v
-      LEFT JOIN bills b ON v.bill_id = b.id
-      WHERE v.politician_id = $1
-      AND v.position NOT IN ('Not Voting', 'Present')
+    const result = await db.query(`
+      SELECT p.*,
+        COALESCE(
+          json_agg(json_build_object(
+            'category', bs.category, 'label', bs.label, 'score', bs.score,
+            'direction', bs.direction, 'confidence', bs.confidence,
+            'vote_count', bs.vote_count, 'summary', bs.summary
+          ) ORDER BY bs.score DESC) FILTER (WHERE bs.category IS NOT NULL), '[]'
+        ) as bias_scores
+      FROM politicians p
+      LEFT JOIN bias_scores bs ON bs.politician_id = p.id
+      WHERE p.id = $1
+      GROUP BY p.id
     `, [id]);
 
-    const allVotes = votesResult.rows;
-    const domains = getAllDomains();
-
-    // Classify each vote into a domain and tally yes/no
-    const domainVotes = {};
-    for (const vote of allVotes) {
-      const domain = classifyVote(vote);
-      if (!domain) continue;
-      if (!domainVotes[domain]) domainVotes[domain] = { yes: 0, no: 0, total: 0 };
-      const pos = vote.position?.toLowerCase();
-      if (pos === 'yes' || pos === 'yea') domainVotes[domain].yes++;
-      else if (pos === 'no' || pos === 'nay') domainVotes[domain].no++;
-      domainVotes[domain].total++;
-    }
-
-    // User's survey answers
-    const surveyResult = await db.query(
-      'SELECT answers FROM user_surveys WHERE user_id = $1',
-      [String(userId)]
-    );
-    const userAnswers = surveyResult.rows[0]?.answers || {};
-
-    // Map survey issue IDs → domain keys
-    const ISSUE_TO_DOMAIN = {
-      healthcare: 'healthcare',
-      climate: 'climate',
-      immigration: 'immigration',
-      gun_policy: 'gun_policy',
-      taxes: 'economy',
-      defense: 'defense',
-      reproductive_rights: 'reproductive_rights',
-      education: 'education',
-      safety_net: 'safety_net',
-      criminal_justice: 'criminal_justice',
-    };
-
-    // Which direction counts as "progressive" per domain
-    const PROGRESSIVE_IS_YES = {
-      healthcare: true,
-      climate: true,
-      immigration: false,
-      gun_policy: true,
-      economy: true,
-      defense: false,
-      reproductive_rights: true,
-      education: true,
-      safety_net: true,
-      criminal_justice: false,
-      voting_rights: true,
-      infrastructure: true,
-    };
-
-    // Build per-domain breakdown
-    const domainBreakdown = [];
-
-    for (const [domainKey, domainConfig] of Object.entries(domains)) {
-      const votes = domainVotes[domainKey];
-      if (!votes || votes.total < 3) continue;
-
-      const surveyIssue = Object.entries(ISSUE_TO_DOMAIN).find(([, d]) => d === domainKey)?.[0];
-      const userValue = surveyIssue ? userAnswers[surveyIssue] : null;
-
-      const progressiveIsYes = PROGRESSIVE_IS_YES[domainKey] ?? true;
-      const politicianProgressiveVotes = progressiveIsYes ? votes.yes : votes.no;
-      const politicianProgressivePct = Math.round((politicianProgressiveVotes / votes.total) * 100);
-
-      let agreementPct = null;
-      if (userValue !== null && userValue !== undefined) {
-        const userProgressivePct = Math.round(((2 - userValue) / 4) * 100);
-        agreementPct = 100 - Math.abs(userProgressivePct - politicianProgressivePct);
-      }
-
-      domainBreakdown.push({
-        domain: domainKey,
-        label: domainConfig.label,
-        icon: domainConfig.icon,
-        voteCount: votes.total,
-        politicianProgressivePct,
-        agreementPct,
-        hasUserAnswer: userValue !== null && userValue !== undefined,
-      });
-    }
-
-    domainBreakdown.sort((a, b) => b.voteCount - a.voteCount);
-
-    res.json({
-      score: overall.score,
-      issuesAnalyzed: overall.issuesAnalyzed,
-      breakdown: domainBreakdown,
-      surveyBreakdown: overall.breakdown,
-    });
-
+    if (!result.rows.length) return res.status(404).json({ error: 'Politician not found.' });
+    res.json(result.rows[0]);
   } catch (err) {
-    console.error('Alignment breakdown error:', err);
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -271,21 +257,6 @@ router.post('/:id/analyze', async (req, res) => {
     res.json({ success: true, analysis });
   } catch (err) {
     console.error('Analysis error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET /api/politicians/:id/analysis
-router.get('/:id/analysis', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const result = await db.query(`
-      SELECT content, computed_at FROM ai_analysis
-      WHERE politician_id = $1 AND analysis_type = 'full_profile'
-    `, [id]);
-    if (!result.rows.length) return res.status(404).json({ error: 'No analysis yet.' });
-    res.json({ analysis: result.rows[0].content, computedAt: result.rows[0].computed_at });
-  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
