@@ -111,10 +111,15 @@ function normalizeMember(m) {
 }
 
 function normalizeVote(v, politicianId) {
-  // Congress.gov vote structure from member votes endpoint
+  // Congress.gov vote structure from member votes endpoint.
+  // vote_id uses shared roll-call identity (chamber-congress-session-rollNumber)
+  // WITHOUT the politician's bioguide ID so the same roll call gets the same
+  // vote_id across politicians — required for party-loyalty comparison.
+  const chamber = (v.chamber || '').toLowerCase().includes('senate') ? 'senate' : 'house';
+  const voteId  = `${chamber}-${v.congress}-${v.sessionNumber}-${v.rollNumber}`;
   return {
     politician_id: politicianId,
-    vote_id: `${v.congress}-${v.chamber}-${v.sessionNumber}-${v.rollNumber}`,
+    vote_id:  voteId,
     position: normalizePosition(v.memberVotes?.memberVote?.[0]?.votePosition || v.votePosition),
     question: v.question || v.voteType,
     description: v.description || v.title,

@@ -29,6 +29,23 @@ router.get('/debug/count', async (req, res) => {
   }
 });
 
+// POST /api/politicians/debug/migrate-vote-ids
+// One-time migration: strip the per-politician bioguide suffix from vote_ids
+// so all politicians share the same vote_id for the same roll call.
+// Old format: senate-119-1-599-M000355  →  New: senate-119-1-599
+router.post('/debug/migrate-vote-ids', async (req, res) => {
+  try {
+    const result = await db.query(`
+      UPDATE votes
+      SET vote_id = REGEXP_REPLACE(vote_id, '-[A-Z][0-9]{6}$', '')
+      WHERE vote_id ~ '-[A-Z][0-9]{6}$'
+    `);
+    res.json({ updated: result.rowCount });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/politicians/debug/votes?id=X — inspect vote_ids in DB
 router.get('/debug/votes', async (req, res) => {
   const { id } = req.query;
