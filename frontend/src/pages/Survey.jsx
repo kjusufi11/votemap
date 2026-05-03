@@ -1,6 +1,5 @@
 import { useAuth } from '../contexts/AuthContext';
 import React, { useState, useEffect } from 'react';
-
 import { useNavigate } from 'react-router-dom';
 import { saveSurvey, getSurvey } from '../services/api';
 
@@ -8,100 +7,100 @@ const ISSUES = [
   {
     id: 'healthcare',
     label: 'Healthcare',
-    question: 'How should the US handle healthcare coverage?',
+    question: 'How should Americans get healthcare coverage?',
     options: [
-      { value: -2, label: 'Government should provide universal coverage for all Americans' },
-      { value: -1, label: 'Expand public options while keeping private insurance' },
-      { value: 1, label: 'Keep healthcare primarily private with some safety nets' },
-      { value: 2, label: 'Let the free market determine healthcare with minimal government role' },
+      { value: -2, label: 'The government should guarantee coverage for every American, funded through taxes' },
+      { value: -1, label: 'People should be able to choose between a government plan and private insurance' },
+      { value: 1,  label: 'Private insurance should be the main option, with government help for those who truly cannot afford it' },
+      { value: 2,  label: 'Healthcare decisions should be left to individuals and the market, with minimal government involvement' },
     ],
   },
   {
     id: 'climate',
     label: 'Climate & Energy',
-    question: 'What should the US prioritize on climate and energy?',
+    question: 'What should be the priority for US energy and environmental policy?',
     options: [
-      { value: -2, label: 'Rapid transition to clean energy, even at significant economic cost' },
-      { value: -1, label: 'Invest in clean energy while managing economic impact' },
-      { value: 1, label: 'Balance energy independence with gradual environmental improvements' },
-      { value: 2, label: 'Prioritize energy production and economic growth over climate regulations' },
+      { value: -2, label: 'Rapidly transition to clean energy sources, even if it raises costs or disrupts existing industries' },
+      { value: -1, label: 'Invest significantly in clean energy while managing the economic transition carefully' },
+      { value: 1,  label: 'Expand domestic energy production of all types while making gradual environmental improvements' },
+      { value: 2,  label: 'Prioritize energy production and affordability — environmental regulations should not limit that' },
     ],
   },
   {
     id: 'immigration',
     label: 'Immigration',
-    question: 'What approach should the US take on immigration?',
+    question: 'What should US immigration policy focus on?',
     options: [
-      { value: -2, label: 'Create broad pathways to citizenship and expand legal immigration' },
-      { value: -1, label: 'Reform immigration with expanded legal pathways and humane enforcement' },
-      { value: 1, label: 'Strengthen border security while maintaining legal immigration' },
-      { value: 2, label: 'Significantly reduce immigration and strictly enforce existing laws' },
+      { value: -2, label: 'Create more pathways for people to come legally and address the status of those already here' },
+      { value: -1, label: 'Reform the system to make legal immigration easier while enforcing laws humanely' },
+      { value: 1,  label: 'Secure the border first, then consider reforms to the legal immigration system' },
+      { value: 2,  label: 'Significantly reduce the number of people coming in and strictly enforce existing immigration law' },
     ],
   },
   {
-    id: 'gun_control',
+    id: 'gun_policy',
     label: 'Gun Policy',
-    question: 'How should the US approach gun laws?',
+    question: 'How should the US approach gun ownership and safety?',
     options: [
-      { value: -2, label: 'Significantly expand gun regulations and restrictions' },
-      { value: -1, label: 'Add universal background checks and close loopholes' },
-      { value: 1, label: 'Enforce existing laws more strictly without new restrictions' },
-      { value: 2, label: 'Protect gun rights and reduce existing restrictions' },
+      { value: -2, label: 'Significantly expand gun safety laws, including restrictions on certain weapons and ownership requirements' },
+      { value: -1, label: 'Add common-sense measures like universal background checks and closing known loopholes' },
+      { value: 1,  label: 'Enforce existing laws more effectively without creating new restrictions on gun ownership' },
+      { value: 2,  label: 'Protect the right to own and carry firearms and roll back existing restrictions where possible' },
     ],
   },
   {
     id: 'taxes',
-    label: 'Taxes & Spending',
-    question: 'How should the government handle taxes and spending?',
+    label: 'Taxes & Government Spending',
+    question: 'How should the government balance taxes and public spending?',
     options: [
-      { value: -2, label: 'Significantly raise taxes on wealthy individuals and corporations' },
-      { value: -1, label: 'Modestly increase taxes on high earners to fund public services' },
-      { value: 1, label: 'Keep taxes low and reduce government spending' },
-      { value: 2, label: 'Significantly cut taxes and government programs' },
+      { value: -2, label: 'Raise taxes on high earners and corporations to fund more robust public services and programs' },
+      { value: -1, label: 'Modestly increase taxes where needed to maintain and improve public services' },
+      { value: 1,  label: 'Keep taxes low and find ways to reduce government spending and the national debt' },
+      { value: 2,  label: 'Significantly cut taxes and reduce the size and scope of government programs' },
     ],
   },
   {
     id: 'defense',
     label: 'Defense & Foreign Policy',
-    question: 'What should US foreign policy and defense look like?',
+    question: 'What role should the US play in the world?',
     options: [
-      { value: -2, label: 'Reduce military spending and focus on diplomacy' },
-      { value: -1, label: 'Maintain alliances and international engagement with targeted spending' },
-      { value: 1, label: 'Prioritize national interests and maintain strong military' },
-      { value: 2, label: 'Expand military spending and take a stronger stance internationally' },
+      { value: -2, label: 'Reduce military spending and focus on diplomacy and international cooperation' },
+      { value: -1, label: 'Maintain strong alliances and international engagement while being selective about military action' },
+      { value: 1,  label: 'Prioritize American national interests and maintain a strong military to back them up' },
+      { value: 2,  label: 'Significantly increase military strength and take a more assertive stance in foreign affairs' },
     ],
   },
   {
     id: 'reproductive_rights',
     label: 'Reproductive Rights',
-    question: 'What is your position on abortion access?',
+    question: 'How should abortion be handled legally in the US?',
     options: [
-      { value: -2, label: 'Abortion should be legal without restrictions throughout pregnancy' },
-      { value: -1, label: 'Abortion should be legal with some limitations' },
-      { value: 1, label: 'Abortion should be significantly restricted with limited exceptions' },
-      { value: 2, label: 'Abortion should be banned or nearly banned' },
+      { value: -2, label: 'Abortion should be a legal medical decision between a patient and their doctor, without government restrictions' },
+      { value: -1, label: 'Abortion should be legal, with some limitations at later stages of pregnancy' },
+      { value: 1,  label: 'Abortion should be significantly restricted, with exceptions for specific circumstances' },
+      { value: 2,  label: 'Abortion should be prohibited or nearly prohibited in most or all cases' },
     ],
   },
   {
     id: 'education',
     label: 'Education',
-    question: 'How should the US approach public education?',
+    question: 'What should guide how the US approaches K-12 education?',
     options: [
-      { value: -2, label: 'Significantly increase public school funding and universal pre-K' },
-      { value: -1, label: 'Increase public education investment and teacher pay' },
-      { value: 1, label: 'Expand school choice and parental control over education' },
-      { value: 2, label: 'Reduce federal education role and expand private/charter options' },
+      { value: -2, label: 'Significantly increase federal investment in public schools to ensure equal quality for all students' },
+      { value: -1, label: 'Increase public school funding and teacher pay to strengthen the existing system' },
+      { value: 1,  label: 'Give families more options through charter schools and school choice programs' },
+      { value: 2,  label: 'Reduce federal involvement and give states and families full control over education decisions' },
     ],
   },
   {
-    id: 'social_safety_net',
+    id: 'safety_net',
     label: 'Social Safety Net',
-    question: 'How should the US handle social programs like welfare and food assistance?',
+    question: 'How should the government support people who are struggling financially?',
     options: [
-      { value: -2, label: 'Significantly expand social programs and eligibility' },
-      { value: -1, label: 'Strengthen and modernize existing safety net programs' },
-      { value: 1, label: 'Reform programs to encourage self-sufficiency' },
-      { value: 2, label: 'Reduce social programs and return responsibility to individuals' },
+      { value: -2, label: 'Expand programs like food assistance, housing support, and welfare to reach more people who need help' },
+      { value: -1, label: 'Strengthen existing programs and make them easier to access for those who qualify' },
+      { value: 1,  label: 'Reform programs to have clear work requirements and timelines to encourage self-sufficiency' },
+      { value: 2,  label: 'Significantly reduce government assistance programs and return that responsibility to communities and individuals' },
     ],
   },
   {
@@ -109,10 +108,10 @@ const ISSUES = [
     label: 'Criminal Justice',
     question: 'What should be the focus of the criminal justice system?',
     options: [
-      { value: -2, label: 'Significant reform: reduce incarceration, invest in communities' },
-      { value: -1, label: 'Reform sentencing and invest in rehabilitation' },
-      { value: 1, label: 'Focus on law enforcement and maintaining public safety' },
-      { value: 2, label: 'Strengthen penalties and expand law enforcement capabilities' },
+      { value: -2, label: 'Reduce incarceration, address root causes of crime, and invest in rehabilitation and community support' },
+      { value: -1, label: 'Reform sentencing guidelines and expand rehabilitation programs while maintaining public safety' },
+      { value: 1,  label: 'Prioritize law enforcement and public safety, with strong consequences for criminal behavior' },
+      { value: 2,  label: 'Increase penalties, expand law enforcement capabilities, and take a tougher stance on crime' },
     ],
   },
 ];
@@ -125,19 +124,18 @@ const IMPORTANCE_LABELS = {
 
 export default function Survey() {
   const { user } = useAuth();
-  // user.id from our auth
   const navigate = useNavigate();
-  const [answers, setAnswers] = useState({});
+  const [answers, setAnswers]     = useState({});
   const [importance, setImportance] = useState({});
-  const [step, setStep] = useState(0); // 0 = intro, 1..N = questions, N+1 = done
-  const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [step, setStep]           = useState(0);
+  const [saving, setSaving]       = useState(false);
+  const [loading, setLoading]     = useState(true);
+  const [saved, setSaved]         = useState(false);
 
-  const totalSteps = ISSUES.length;
+  const totalSteps  = ISSUES.length;
   const currentIssue = ISSUES[step - 1];
 
   useEffect(() => {
-    // Load existing survey if user has one
     async function load() {
       try {
         const existing = await getSurvey(user.id);
@@ -153,9 +151,7 @@ export default function Survey() {
 
   function handleAnswer(issueId, value) {
     setAnswers(prev => ({ ...prev, [issueId]: value }));
-    if (!importance[issueId]) {
-      setImportance(prev => ({ ...prev, [issueId]: 2 })); // default: somewhat important
-    }
+    if (!importance[issueId]) setImportance(prev => ({ ...prev, [issueId]: 2 }));
   }
 
   function handleImportance(issueId, value) {
@@ -166,6 +162,7 @@ export default function Survey() {
     setSaving(true);
     try {
       await saveSurvey(user.id, { answers, importance });
+      setSaved(true);
       setStep(totalSteps + 1);
     } catch (err) {
       console.error('Failed to save survey:', err);
@@ -175,8 +172,9 @@ export default function Survey() {
 
   if (loading) return <LoadingState />;
 
-  // Intro screen
+  // Intro
   if (step === 0) {
+    const answeredCount = Object.keys(answers).length;
     return (
       <main style={{ maxWidth: 680, margin: '0 auto', padding: '4rem 1.5rem' }}>
         <div style={{ textAlign: 'center' }}>
@@ -185,50 +183,42 @@ export default function Survey() {
             fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-2)',
             letterSpacing: '.1em', textTransform: 'uppercase',
             border: '1px solid var(--border-med)', borderRadius: 20,
-            padding: '5px 16px', marginBottom: '2rem',
-            background: 'var(--bg-2)',
+            padding: '5px 16px', marginBottom: '2rem', background: 'var(--bg-2)',
           }}>
-            ◎ Your values · Private & secure
+            ◎ Private · Only you can see your answers
           </div>
 
           <h1 style={{
             fontFamily: 'var(--font-display)', fontSize: 'clamp(2rem, 5vw, 3.5rem)',
-            fontWeight: 900, letterSpacing: '-.02em', lineHeight: 1.05,
-            marginBottom: '1.25rem',
+            fontWeight: 900, letterSpacing: '-.02em', lineHeight: 1.05, marginBottom: '1.25rem',
           }}>
             Where do <em style={{ fontStyle: 'italic', color: 'var(--red)' }}>you</em> stand?
           </h1>
 
           <p style={{ fontSize: 17, color: 'var(--text-2)', lineHeight: 1.7, marginBottom: '1rem' }}>
-            Answer {totalSteps} questions about the issues that matter to you.
-            Your responses are private — only you can see them.
+            Answer {totalSteps} questions about policy issues that matter to you.
+            There are no right or wrong answers — just your honest opinion.
           </p>
           <p style={{ fontSize: 14, color: 'var(--text-3)', lineHeight: 1.65, marginBottom: '2.5rem' }}>
-            After completing the survey, you'll see how closely your values align
-            with each of your representatives — scored by the issues you care about most.
+            When you're done, you'll see how closely each of your representatives
+            actually votes in line with what you believe — weighted by the issues
+            you care about most.
           </p>
 
-          <button onClick={() => setStep(1)} style={{
+          <button onClick={() => setStep(answeredCount > 0 ? 1 : 1)} style={{
             height: 52, padding: '0 2.5rem',
             background: 'var(--text)', color: 'var(--bg-2)',
             borderRadius: 'var(--radius)', fontSize: 15, fontWeight: 500,
-            cursor: 'pointer', transition: 'all var(--transition)',
-            border: 'none',
+            cursor: 'pointer', border: 'none',
           }}>
-            Start the survey →
+            {answeredCount > 0 ? `Continue survey (${answeredCount}/${totalSteps} done) →` : 'Start the survey →'}
           </button>
-
-          {Object.keys(answers).length > 0 && (
-            <p style={{ marginTop: '1rem', fontSize: 13, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
-              You've answered {Object.keys(answers).length} of {totalSteps} questions before.
-            </p>
-          )}
         </div>
       </main>
     );
   }
 
-  // Done screen
+  // Done
   if (step === totalSteps + 1) {
     return (
       <main style={{ maxWidth: 680, margin: '0 auto', padding: '4rem 1.5rem', textAlign: 'center' }}>
@@ -236,37 +226,44 @@ export default function Survey() {
         <h1 style={{
           fontFamily: 'var(--font-display)', fontSize: 'clamp(2rem, 5vw, 3rem)',
           fontWeight: 900, letterSpacing: '-.02em', marginBottom: '1rem',
-        }}>
-          Your values are saved.
-        </h1>
-        <p style={{ fontSize: 16, color: 'var(--text-2)', lineHeight: 1.7, marginBottom: '2.5rem' }}>
-          Now see how your representatives measure up. Your alignment scores are calculated
-          based on the issues you care about most.
+        }}>Your values are saved.</h1>
+        <p style={{ fontSize: 16, color: 'var(--text-2)', lineHeight: 1.7, marginBottom: '1rem' }}>
+          We'll use your answers to calculate how closely each of your representatives
+          votes in line with what you believe — weighted by the issues you marked as most important.
         </p>
-        <button onClick={() => navigate('/reps')} style={{
-          height: 52, padding: '0 2rem',
-          background: 'var(--text)', color: 'var(--bg-2)',
-          borderRadius: 'var(--radius)', fontSize: 15, fontWeight: 500,
-          cursor: 'pointer', border: 'none',
-        }}>
-          See my representatives →
-        </button>
+        <p style={{ fontSize: 14, color: 'var(--text-3)', lineHeight: 1.65, marginBottom: '2.5rem' }}>
+          You can update your answers anytime from the "My Values" menu.
+          Alignment scores will appear on your representatives' profiles.
+        </p>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button onClick={() => navigate('/reps')} style={{
+            height: 48, padding: '0 2rem',
+            background: 'var(--text)', color: 'var(--bg-2)',
+            borderRadius: 'var(--radius)', fontSize: 14, fontWeight: 500,
+            cursor: 'pointer', border: 'none',
+          }}>See my representatives →</button>
+          <button onClick={() => setStep(1)} style={{
+            height: 48, padding: '0 2rem',
+            background: 'transparent', color: 'var(--text-2)',
+            borderRadius: 'var(--radius)', fontSize: 14,
+            cursor: 'pointer', border: '1px solid var(--border-med)',
+          }}>Review my answers</button>
+        </div>
       </main>
     );
   }
 
-  // Question screen
+  // Question
   const answered = answers[currentIssue.id] !== undefined;
   const progress = ((step - 1) / totalSteps) * 100;
 
   return (
     <main style={{ maxWidth: 680, margin: '0 auto', padding: '3rem 1.5rem 5rem' }}>
-
-      {/* Progress bar */}
+      {/* Progress */}
       <div style={{ marginBottom: '2.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
           <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>
-            Question {step} of {totalSteps}
+            {step} of {totalSteps}
           </span>
           <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>
             {currentIssue.label}
@@ -283,66 +280,53 @@ export default function Survey() {
 
       {/* Question */}
       <h2 style={{
-        fontFamily: 'var(--font-display)', fontSize: 'clamp(1.5rem, 3.5vw, 2.25rem)',
-        fontWeight: 700, letterSpacing: '-.015em', lineHeight: 1.2,
+        fontFamily: 'var(--font-display)', fontSize: 'clamp(1.4rem, 3.5vw, 2.1rem)',
+        fontWeight: 700, letterSpacing: '-.015em', lineHeight: 1.25,
         marginBottom: '2rem',
       }}>
         {currentIssue.question}
       </h2>
 
-      {/* Answer options */}
+      {/* Options */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: '2rem' }}>
         {currentIssue.options.map(option => {
           const selected = answers[currentIssue.id] === option.value;
           return (
-            <button
-              key={option.value}
-              onClick={() => handleAnswer(currentIssue.id, option.value)}
-              style={{
-                padding: '1rem 1.25rem',
-                textAlign: 'left', cursor: 'pointer',
-                background: selected ? 'var(--text)' : 'var(--bg-2)',
-                color: selected ? 'var(--bg-2)' : 'var(--text)',
-                border: `1.5px solid ${selected ? 'var(--text)' : 'var(--border-med)'}`,
-                borderRadius: 'var(--radius-lg)',
-                fontSize: 14, lineHeight: 1.5,
-                transition: 'all var(--transition)',
-                boxShadow: selected ? 'none' : 'var(--shadow)',
-              }}
-            >
+            <button key={option.value} onClick={() => handleAnswer(currentIssue.id, option.value)} style={{
+              padding: '1rem 1.25rem', textAlign: 'left', cursor: 'pointer',
+              background: selected ? 'var(--text)' : 'var(--bg-2)',
+              color: selected ? 'var(--bg-2)' : 'var(--text)',
+              border: `1.5px solid ${selected ? 'var(--text)' : 'var(--border-med)'}`,
+              borderRadius: 'var(--radius-lg)', fontSize: 14, lineHeight: 1.55,
+              transition: 'all var(--transition)', boxShadow: selected ? 'none' : 'var(--shadow)',
+            }}>
               {option.label}
             </button>
           );
         })}
       </div>
 
-      {/* Importance selector — only show after answering */}
+      {/* Importance */}
       {answered && (
         <div style={{
-          padding: '1rem 1.25rem',
-          background: 'var(--bg-2)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)', marginBottom: '2rem',
-          boxShadow: 'var(--shadow)',
+          padding: '1rem 1.25rem', background: 'var(--bg-2)',
+          border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
+          marginBottom: '2rem', boxShadow: 'var(--shadow)',
           animation: 'fadeUp 0.3s ease both',
         }}>
-          <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: '0.75rem' }}>
-            How important is this issue to you?
+          <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: '.75rem' }}>
+            How important is this issue to you personally?
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
             {[3, 2, 1].map(val => (
-              <button
-                key={val}
-                onClick={() => handleImportance(currentIssue.id, val)}
-                style={{
-                  flex: 1, padding: '8px 4px', fontSize: 12,
-                  fontFamily: 'var(--font-mono)', cursor: 'pointer',
-                  background: (importance[currentIssue.id] || 2) === val ? 'var(--text)' : 'transparent',
-                  color: (importance[currentIssue.id] || 2) === val ? 'var(--bg-2)' : 'var(--text-2)',
-                  border: `1px solid ${(importance[currentIssue.id] || 2) === val ? 'var(--text)' : 'var(--border-med)'}`,
-                  borderRadius: 'var(--radius)', transition: 'all var(--transition)',
-                  textAlign: 'center',
-                }}
-              >
+              <button key={val} onClick={() => handleImportance(currentIssue.id, val)} style={{
+                flex: 1, padding: '8px 4px', fontSize: 12,
+                fontFamily: 'var(--font-mono)', cursor: 'pointer',
+                background: (importance[currentIssue.id] || 2) === val ? 'var(--text)' : 'transparent',
+                color: (importance[currentIssue.id] || 2) === val ? 'var(--bg-2)' : 'var(--text-2)',
+                border: `1px solid ${(importance[currentIssue.id] || 2) === val ? 'var(--text)' : 'var(--border-med)'}`,
+                borderRadius: 'var(--radius)', transition: 'all var(--transition)', textAlign: 'center',
+              }}>
                 {IMPORTANCE_LABELS[val]}
               </button>
             ))}
@@ -352,25 +336,15 @@ export default function Survey() {
 
       {/* Navigation */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button
-          onClick={() => setStep(s => Math.max(1, s - 1))}
-          disabled={step === 1}
-          style={{
-            fontSize: 13, fontFamily: 'var(--font-mono)', cursor: 'pointer',
-            color: step === 1 ? 'var(--text-3)' : 'var(--text-2)',
-            border: '1px solid var(--border-med)', borderRadius: 'var(--radius)',
-            padding: '8px 16px', background: 'transparent',
-            opacity: step === 1 ? 0.4 : 1,
-          }}
-        >
-          ← Back
-        </button>
+        <button onClick={() => setStep(s => Math.max(1, s - 1))} disabled={step === 1} style={{
+          fontSize: 13, fontFamily: 'var(--font-mono)', cursor: 'pointer',
+          color: step === 1 ? 'var(--text-3)' : 'var(--text-2)',
+          border: '1px solid var(--border-med)', borderRadius: 'var(--radius)',
+          padding: '8px 16px', background: 'transparent', opacity: step === 1 ? 0.4 : 1,
+        }}>← Back</button>
 
         <button
-          onClick={() => {
-            if (step === totalSteps) handleFinish();
-            else setStep(s => s + 1);
-          }}
+          onClick={() => { if (step === totalSteps) handleFinish(); else setStep(s => s + 1); }}
           disabled={!answered || saving}
           style={{
             fontSize: 14, fontWeight: 500, cursor: answered ? 'pointer' : 'not-allowed',
@@ -385,15 +359,12 @@ export default function Survey() {
         </button>
       </div>
 
-      {/* Skip option */}
       {!answered && (
         <p style={{ textAlign: 'center', marginTop: '1rem' }}>
-          <button
-            onClick={() => setStep(s => s + 1)}
-            style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer' }}
-          >
-            Skip this question
-          </button>
+          <button onClick={() => setStep(s => s + 1)} style={{
+            fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-3)',
+            background: 'none', border: 'none', cursor: 'pointer',
+          }}>Skip this question</button>
         </p>
       )}
     </main>
