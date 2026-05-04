@@ -65,9 +65,10 @@ export default function PoliticianProfile() {
   async function loadConflicts(polData) {
     setConflictsLoading(true);
     try {
-      // 1. Try the backend cache first
+      // 1. Try the backend cache first — skip if fecCandidateId is null
+      //    (null means a previous FEC lookup failed, so we should retry)
       const cached = await getConflicts(id);
-      if (cached?.fromCache) {
+      if (cached?.fromCache && cached?.fecCandidateId) {
         setConflicts(cached);
         return;
       }

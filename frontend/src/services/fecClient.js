@@ -6,6 +6,20 @@
 const BASE = 'https://api.fec.gov/v1';
 const API_KEY = import.meta.env.VITE_FEC_API_KEY || 'DEMO_KEY';
 
+const STATE_ABBR = {
+  alabama:'AL',alaska:'AK',arizona:'AZ',arkansas:'AR',california:'CA',
+  colorado:'CO',connecticut:'CT',delaware:'DE',florida:'FL',georgia:'GA',
+  hawaii:'HI',idaho:'ID',illinois:'IL',indiana:'IN',iowa:'IA',kansas:'KS',
+  kentucky:'KY',louisiana:'LA',maine:'ME',maryland:'MD',massachusetts:'MA',
+  michigan:'MI',minnesota:'MN',mississippi:'MS',missouri:'MO',montana:'MT',
+  nebraska:'NE',nevada:'NV','new hampshire':'NH','new jersey':'NJ',
+  'new mexico':'NM','new york':'NY','north carolina':'NC','north dakota':'ND',
+  ohio:'OH',oklahoma:'OK',oregon:'OR',pennsylvania:'PA','rhode island':'RI',
+  'south carolina':'SC','south dakota':'SD',tennessee:'TN',texas:'TX',
+  utah:'UT',vermont:'VT',virginia:'VA',washington:'WA','west virginia':'WV',
+  wisconsin:'WI',wyoming:'WY','district of columbia':'DC',
+};
+
 async function get(path, params = {}) {
   const url = new URL(`${BASE}${path}`);
   url.searchParams.set('api_key', API_KEY);
@@ -18,27 +32,34 @@ async function get(path, params = {}) {
 }
 
 // Returns FEC candidate_id or null. Tries last name first (FEC stores as "LAST, FIRST").
+// Normalizes full state names to abbreviations. Falls back to the other chamber if no match.
 export async function findCandidateId(fullName, state, chamber) {
-  const office = chamber === 'senate' ? 'S' : 'H';
+  const stateAbbr = (state.length === 2 ? state : STATE_ABBR[state.toLowerCase()] || state).toUpperCase();
   const lastName = fullName.trim().split(' ').pop();
   const nameParts = fullName.toLowerCase().replace(/[^a-z ]/g, '').split(' ').filter(p => p.length > 2);
 
-  for (const query of [lastName, fullName]) {
-    try {
-      const data = await get('/candidates/search/', {
-        q: query, state: state.toUpperCase(), office,
-        sort: '-receipts', per_page: 10,
-      });
-      const results = data.results || [];
-      if (!results.length) continue;
+  // Try declared chamber first, then the other one (DB chamber field is sometimes wrong)
+  const primaryOffice = chamber === 'senate' ? 'S' : 'H';
+  const fallbackOffice = primaryOffice === 'S' ? 'H' : 'S';
 
-      const match = results.find(r => {
-        const rn = (r.name || '').toLowerCase().replace(/[^a-z ]/g, '');
-        return nameParts.some(p => rn.includes(p));
-      }) || results[0];
+  for (const office of [primaryOffice, fallbackOffice]) {
+    for (const query of [lastName, fullName]) {
+      try {
+        const data = await get('/candidates/search/', {
+          q: query, state: stateAbbr, office,
+          sort: '-receipts', per_page: 10,
+        });
+        const results = data.results || [];
+        if (!results.length) continue;
 
-      if (match?.candidate_id) return { candidateId: match.candidate_id, fecName: match.name };
-    } catch {}
+        const match = results.find(r => {
+          const rn = (r.name || '').toLowerCase().replace(/[^a-z ]/g, '');
+          return nameParts.some(p => rn.includes(p));
+        }) || results[0];
+
+        if (match?.candidate_id) return { candidateId: match.candidate_id, fecName: match.name };
+      } catch {}
+    }
   }
   return null;
 }
