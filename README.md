@@ -5,12 +5,12 @@ Track how politicians vote. Surface their real ideological biases with AI.
 ## Architecture
 
 ```
-votemap/
+votematch/
 ├── backend/          Node.js + Express + PostgreSQL
 │   └── src/
 │       ├── db/       Database connection + migrations
 │       ├── routes/   API endpoints
-│       └── services/ ProPublica, Google Civic, Claude AI, sync
+│       └── services/ Congress.gov, FEC, Google Civic, Claude AI, sync
 └── frontend/         React + Vite
     └── src/
         ├── pages/    ZipLookup, PoliticianProfile
@@ -23,10 +23,10 @@ votemap/
 ```
 User enters ZIP
     → Google Civic API → list of representatives (name, office, party)
-    → Match names to ProPublica bioguide IDs
-    → Pull vote history from ProPublica (or our DB cache)
+    → Match to Congress.gov bioguide IDs → pull vote history (or DB cache)
+    → FEC API → top donor industries → cross-reference with votes → conflict flags
     → Claude analyzes vote patterns → bias scores
-    → Display politician profiles with bias meters
+    → Display politician profiles with bias meters + conflict of interest panel
 ```
 
 ## Setup
@@ -35,7 +35,8 @@ User enters ZIP
 
 | Service | URL | Cost |
 |---------|-----|------|
-| ProPublica Congress API | https://www.propublica.org/datastore/api/propublica-congress-api | Free |
+| Congress.gov API | https://api.congress.gov/ — register at https://api.data.gov/signup/ | Free |
+| FEC API | https://api.fec.gov/v1/ — register at https://api.data.gov/signup/ | Free |
 | Google Civic Information API | https://console.cloud.google.com → Enable "Civic Information API" | Free (generous quota) |
 | Anthropic API | https://console.anthropic.com | Pay-per-use (~$0.01 per analysis) |
 
@@ -86,24 +87,26 @@ GET  /api/politicians?q=name&state=CA           → search
 ## Roadmap
 
 - [x] Backend data models + DB schema
-- [x] ProPublica sync service
+- [x] Congress.gov vote sync service
+- [x] FEC donor data + conflicts of interest detector
 - [x] Google Civic ZIP → representatives lookup
 - [x] Claude AI bias analysis engine
 - [x] Core API routes
-- [ ] Frontend: ZIP entry page
-- [ ] Frontend: Representative cards
-- [ ] Frontend: Politician profile + bias visualization
-- [ ] Frontend: Vote history browser
+- [x] Frontend: ZIP entry page
+- [x] Frontend: Representative cards with alignment badges
+- [x] Frontend: Politician profile + bias visualization
+- [x] Frontend: Vote history browser
 - [ ] State legislators (currently federal only)
-- [ ] Nightly sync cron job
 - [ ] Email alerts when your rep votes on a tracked issue
 
 ## Notes on data
 
-- **Federal only for now**: ProPublica covers the US Congress. State legislature
+- **Federal only for now**: Congress.gov covers the US Congress. State legislature
   data is harder — each state has its own source. OpenStates.org covers most.
 - **Bias scores are AI-generated**: They're computed from voting *patterns*,
   not party affiliation. A Democrat who votes against gun control 80% of the
   time will show that pattern regardless of party.
-- **ProPublica rate limits**: Free tier is ~1 req/sec. The sync service respects
-  this automatically.
+- **Conflict of interest flags**: Cross-referenced from FEC campaign finance records.
+  Flagged when a top donor industry aligns with 80%+ of a politician's votes in
+  that domain. Correlation, not proof of causation.
+- **Congress.gov API**: Free, no rate limit concerns with caching enabled.

@@ -41,13 +41,16 @@ After this, refresh your GitHub tab — you should see all the files there.
 
 ## Step 4 — Get your API keys
 
-You need three keys. All are free (or near-free):
+You need four keys. All are free (or near-free):
 
-### ProPublica Congress API (free)
-1. Go to https://www.propublica.org/datastore/api/propublica-congress-api
-2. Click **Get an API Key**
-3. Fill in the form — they email you a key within minutes
-4. Save it — looks like: `abc123def456...`
+### Congress.gov API (free)
+1. Go to https://api.data.gov/signup/
+2. Fill in the form — they email you a key within minutes
+3. Save it — looks like: `abc123def456...`
+
+### FEC API (free — same key registration as above)
+1. Use the same api.data.gov key from the step above
+2. Both `CONGRESS_API_KEY` and `FEC_API_KEY` can use the same key value
 
 ### Google Civic Information API (free)
 1. Go to https://console.cloud.google.com
@@ -93,9 +96,11 @@ Now add environment variables — click the **Variables** tab and add each one:
 
 ```
 DATABASE_URL         → (Railway fills this automatically — see Step 9)
-PROPUBLICA_API_KEY   → your ProPublica key
+CONGRESS_API_KEY     → your api.data.gov key
+FEC_API_KEY          → your api.data.gov key (same value as above)
 GOOGLE_CIVIC_API_KEY → your Google key
 ANTHROPIC_API_KEY    → your Anthropic key
+FRONTEND_URL         → https://votematch.app
 NODE_ENV             → production
 PORT                 → 3001
 MOCK_MODE            → false
@@ -200,7 +205,8 @@ Railway detects the push and automatically redeploys both services. Usually take
 | Frontend (Railway) | ~$5/month |
 | PostgreSQL (Railway) | ~$5/month |
 | Cron job | ~$0 (minimal CPU) |
-| ProPublica API | Free |
+| Congress.gov API | Free |
+| FEC API | Free |
 | Google Civic API | Free |
 | Anthropic API | ~$0.01 per analysis |
 | **Total** | **~$15/month + usage** |
