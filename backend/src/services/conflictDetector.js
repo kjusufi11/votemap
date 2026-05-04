@@ -1,19 +1,19 @@
 // src/services/conflictDetector.js
-// Cross-references FEC campaign donor data with a politician's voting record to
+// Cross-references employer donor data with a politician's voting record to
 // flag potential conflicts of interest. Results cached in fec_conflicts for 7 days.
+//
+// FEC donor data is fetched browser-side (api.fec.gov may not resolve from
+// the server) and posted to POST /api/politicians/:id/conflicts.
+// GET /api/politicians/:id/conflicts returns the cached result only.
 
 const db = require('../db');
-const fec = require('./fec');
 const { classifyVote } = require('./domainClassifier');
 
-const MIN_DONATION       = 10000;  // ignore employers below this total
-const MIN_VOTES          = 5;      // need at least this many votes in a domain
-const CONFLICT_THRESHOLD = 80;     // % vote alignment with donor interest to flag
+const MIN_DONATION       = 10000;
+const MIN_VOTES          = 5;
+const CONFLICT_THRESHOLD = 80;
 const CACHE_DAYS         = 7;
 
-// Employer name keyword → industry + domain
-// All entries here want politicians to vote *against* progressive legislation
-// in their domain, so: conflictScore = 100 − politicianProgressivePct
 const SECTOR_MAP = [
   {
     industry: 'Oil, Gas & Coal',
@@ -29,8 +29,7 @@ const SECTOR_MAP = [
     domain: 'defense',
     keywords: [
       'lockheed', 'raytheon', 'boeing', 'northrop', 'general dynamics', 'l3harris',
-      'bae systems', 'huntington ingalls', 'leidos', 'saic', 'booz allen',
-      'textron', 'sierra nevada',
+      'bae systems', 'huntington ingalls', 'leidos', 'saic', 'booz allen', 'textron',
     ],
   },
   {
@@ -56,8 +55,8 @@ const SECTOR_MAP = [
     keywords: [
       'goldman sachs', 'jpmorgan', 'jp morgan', 'morgan stanley', 'wells fargo',
       'citigroup', 'citibank', 'bank of america', 'blackstone', 'blackrock',
-      'carlyle', 'kkr', 'private equity', 'investment bank',
-      'merrill lynch', 'deutsche bank', 'barclays',
+      'carlyle', 'kkr', 'private equity', 'investment bank', 'merrill lynch',
+      'deutsche bank', 'barclays',
     ],
   },
   {
@@ -72,71 +71,54 @@ const SECTOR_MAP = [
     industry: 'Tobacco & Vaping',
     domain: 'healthcare',
     keywords: [
-      'altria', 'philip morris', 'reynolds american', 'tobacco', 'lorillard',
-      'juul', 'vaping',
+      'altria', 'philip morris', 'reynolds american', 'tobacco', 'lorillard', 'juul',
     ],
   },
 ];
 
-// Whether a YES vote is the "progressive" position per domain.
-// Mirrors the same map in alignmentEngine.js.
 const PROGRESSIVE_IS_YES = {
   healthcare: true, climate: true, immigration: false, gun_policy: true,
   economy: true, defense: false, reproductive_rights: true, education: true,
   safety_net: true, criminal_justice: false, voting_rights: true, infrastructure: true,
 };
 
-// Employer name strings to skip — individual circumstances, not industries
 const NOISE = new Set([
   'SELF-EMPLOYED', 'SELF EMPLOYED', 'RETIRED', 'NONE', 'NOT EMPLOYED',
   'UNEMPLOYED', 'HOMEMAKER', 'STUDENT', 'N/A', 'NA', 'INFORMATION REQUESTED',
   'INFORMATION REQUESTED PER BEST EFFORTS', 'NOT EMPLOYED/RETIRED',
 ]);
 
-async function detectConflicts(politicianId) {
-  // Return cached result if fresh
-  const cached = await db.query(`
+// Returns cached conflicts or null if not cached / stale
+async function getCachedConflicts(politicianId) {
+  const result = await db.query(`
     SELECT conflicts, fec_candidate_id, top_donors
     FROM fec_conflicts
     WHERE politician_id = $1
       AND computed_at > NOW() - INTERVAL '${CACHE_DAYS} days'
   `, [politicianId]);
-  if (cached.rows.length) {
-    return {
-      conflicts:      cached.rows[0].conflicts,
-      topDonors:      cached.rows[0].top_donors,
-      fecCandidateId: cached.rows[0].fec_candidate_id,
-      fromCache:      true,
-    };
-  }
+  if (!result.rows.length) return null;
+  return {
+    conflicts:      result.rows[0].conflicts,
+    topDonors:      result.rows[0].top_donors,
+    fecCandidateId: result.rows[0].fec_candidate_id,
+    fromCache:      true,
+  };
+}
 
-  const polResult = await db.query(
-    'SELECT full_name, state, chamber FROM politicians WHERE id = $1',
-    [politicianId]
+// Cross-references a pre-supplied employer list against the politician's votes.
+// Called after the browser fetches employer data from FEC directly.
+async function detectConflictsFromEmployers(politicianId, employers, fecCandidateId = null) {
+  const significant = employers.filter(e =>
+    !NOISE.has((e.employer || '').trim().toUpperCase()) && (e.total || 0) >= MIN_DONATION
   );
-  if (!polResult.rows.length) return { conflicts: [], topDonors: [] };
-  const { full_name, state, chamber } = polResult.rows[0];
 
-  // Look up FEC candidate
-  const fecCandidateId = await fec.findCandidateId(full_name, state, chamber);
-  if (!fecCandidateId) {
-    await save(politicianId, null, [], []);
-    return { conflicts: [], topDonors: [], fecCandidateId: null };
-  }
-
-  // Fetch top employer donors
-  const committeeId   = await fec.getCommitteeId(fecCandidateId);
-  const allEmployers  = committeeId ? await fec.getTopEmployers(committeeId) : [];
-  const employers     = allEmployers.filter(e => !NOISE.has(e.employer) && e.total >= MIN_DONATION);
-
-  // Classify politician's votes by domain
+  // Get politician's votes classified by domain
   const votesResult = await db.query(`
     SELECT v.position, v.description, v.question,
            b.title, b.short_title, b.primary_subject, b.categories
     FROM votes v
     LEFT JOIN bills b ON v.bill_id = b.id
-    WHERE v.politician_id = $1
-      AND v.position IN ('Yes', 'No')
+    WHERE v.politician_id = $1 AND v.position IN ('Yes', 'No')
   `, [politicianId]);
 
   const domainVotes = {};
@@ -149,16 +131,15 @@ async function detectConflicts(politicianId) {
     domainVotes[domain].total++;
   }
 
-  // Detect conflicts
   const conflicts = [];
-  const seenDomain = new Set(); // one conflict flagged per industry+domain pair
+  const seenKey = new Set();
 
-  for (const emp of employers) {
+  for (const emp of significant) {
     const sector = classifyEmployer(emp.employer);
     if (!sector) continue;
 
     const key = `${sector.industry}:${sector.domain}`;
-    if (seenDomain.has(key)) continue;
+    if (seenKey.has(key)) continue;
 
     const dv = domainVotes[sector.domain];
     if (!dv || dv.total < MIN_VOTES) continue;
@@ -166,10 +147,10 @@ async function detectConflicts(politicianId) {
     const progressiveIsYes = PROGRESSIVE_IS_YES[sector.domain] ?? true;
     const progressiveVotes = progressiveIsYes ? dv.yes : dv.no;
     const progressivePct   = Math.round((progressiveVotes / dv.total) * 100);
-    const conflictScore    = 100 - progressivePct; // how often they vote WITH donor interest
+    const conflictScore    = 100 - progressivePct;
 
     if (conflictScore >= CONFLICT_THRESHOLD) {
-      seenDomain.add(key);
+      seenKey.add(key);
       conflicts.push({
         donor_org:          toTitleCase(emp.employer),
         industry:           sector.industry,
@@ -185,7 +166,7 @@ async function detectConflicts(politicianId) {
     b.vote_alignment_pct - a.vote_alignment_pct || b.donor_amount - a.donor_amount
   );
 
-  const topDonors = employers.slice(0, 10).map(e => ({
+  const topDonors = significant.slice(0, 10).map(e => ({
     employer: toTitleCase(e.employer),
     total: Math.round(e.total),
   }));
@@ -195,7 +176,7 @@ async function detectConflicts(politicianId) {
 }
 
 function classifyEmployer(name) {
-  const n = name.toLowerCase();
+  const n = (name || '').toLowerCase();
   for (const sector of SECTOR_MAP) {
     if (sector.keywords.some(kw => n.includes(kw))) return sector;
   }
@@ -203,7 +184,7 @@ function classifyEmployer(name) {
 }
 
 function toTitleCase(str) {
-  return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  return (str || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
 async function save(politicianId, fecCandidateId, topDonors, conflicts) {
@@ -215,4 +196,4 @@ async function save(politicianId, fecCandidateId, topDonors, conflicts) {
   `, [politicianId, fecCandidateId, JSON.stringify(topDonors), JSON.stringify(conflicts)]);
 }
 
-module.exports = { detectConflicts };
+module.exports = { getCachedConflicts, detectConflictsFromEmployers };

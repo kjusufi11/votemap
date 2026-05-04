@@ -8,7 +8,7 @@ const sync = require('../services/sync');
 const mockData = require('../services/mockData');
 const { classifyVote, getAllDomains } = require('../services/domainClassifier');
 const { calculateAlignment } = require('../services/alignmentEngine');
-const { detectConflicts } = require('../services/conflictDetector');
+const { getCachedConflicts, detectConflictsFromEmployers } = require('../services/conflictDetector');
 const fec = require('../services/fec');
 
 // GET /api/politicians/debug/fec?name=Ted+Cruz&state=TX&chamber=senate
@@ -208,11 +208,26 @@ router.get('/:id/votes', async (req, res) => {
   }
 });
 
-// GET /api/politicians/:id/conflicts
+// GET /api/politicians/:id/conflicts — returns cached result only
 router.get('/:id/conflicts', async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await detectConflicts(id);
+    const result = await getCachedConflicts(id);
+    if (!result) return res.json({ conflicts: [], topDonors: [], fromCache: false });
+    res.json(result);
+  } catch (err) {
+    console.error('Conflict detection error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/politicians/:id/conflicts — browser sends FEC employer data, backend cross-references
+router.post('/:id/conflicts', async (req, res) => {
+  const { id } = req.params;
+  const { employers, fecCandidateId } = req.body;
+  if (!Array.isArray(employers)) return res.status(400).json({ error: 'employers array required' });
+  try {
+    const result = await detectConflictsFromEmployers(id, employers, fecCandidateId || null);
     res.json(result);
   } catch (err) {
     console.error('Conflict detection error:', err);

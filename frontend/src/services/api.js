@@ -91,8 +91,13 @@ export async function getConflicts(politicianId) {
     const { data } = await api.get(`/politicians/${politicianId}/conflicts`);
     return data;
   } catch {
-    return { conflicts: [], topDonors: [] };
+    return { conflicts: [], topDonors: [], fromCache: false };
   }
+}
+
+export async function computeConflicts(politicianId, employers, fecCandidateId = null) {
+  const { data } = await api.post(`/politicians/${politicianId}/conflicts`, { employers, fecCandidateId });
+  return data;
 }
 
 export async function getAlignmentForPolitician(politicianId, userId) {

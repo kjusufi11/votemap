@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import BiasBar from '../components/BiasBar';
-import { getPolitician, getPoliticianVotes, triggerAnalysis, getErrorMessage, getConflicts } from '../services/api';
+import { getPolitician, getPoliticianVotes, triggerAnalysis, getErrorMessage, getConflicts, computeConflicts } from '../services/api';
+import { findCandidateId, getCommitteeId, getTopEmployers } from '../services/fecClient';
 import { classifyVote, getDomain } from '../utils/domainClassifier';
 
 const PC = { D: 'var(--party-d)', R: 'var(--party-r)', I: 'var(--party-i)' };
@@ -58,16 +59,45 @@ export default function PoliticianProfile() {
 
     // Load alignment and conflicts separately so they don't block the page
     loadAlignment();
-    loadConflicts();
+    loadConflicts(polData);
   }
 
-  async function loadConflicts() {
+  async function loadConflicts(polData) {
     setConflictsLoading(true);
     try {
-      const result = await getConflicts(id);
+      // 1. Try the backend cache first
+      const cached = await getConflicts(id);
+      if (cached?.fromCache) {
+        setConflicts(cached);
+        return;
+      }
+
+      // 2. Cache miss — fetch FEC data from the browser (api.fec.gov supports CORS)
+      if (!polData?.full_name || !polData?.state || !polData?.chamber) {
+        setConflicts({ conflicts: [], topDonors: [] });
+        return;
+      }
+      const found = await findCandidateId(polData.full_name, polData.state, polData.chamber);
+      if (!found?.candidateId) {
+        setConflicts({ conflicts: [], topDonors: [] });
+        return;
+      }
+      const committeeId = await getCommitteeId(found.candidateId);
+      if (!committeeId) {
+        setConflicts({ conflicts: [], topDonors: [] });
+        return;
+      }
+      const employers = await getTopEmployers(committeeId);
+
+      // 3. POST employer list to backend for vote cross-reference + caching
+      const result = await computeConflicts(id, employers, found.candidateId);
       setConflicts(result);
-    } catch { setConflicts({ conflicts: [], topDonors: [] }); }
-    finally { setConflictsLoading(false); }
+    } catch (err) {
+      console.warn('Conflicts load failed:', err.message);
+      setConflicts({ conflicts: [], topDonors: [] });
+    } finally {
+      setConflictsLoading(false);
+    }
   }
 
   async function loadAlignment() {
