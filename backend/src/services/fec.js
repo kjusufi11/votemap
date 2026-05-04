@@ -30,19 +30,36 @@ async function get(path, params = {}) {
   }
 }
 
-// Returns FEC candidate_id (e.g. "S4VT00081") or null
+// Returns FEC candidate_id (e.g. "S4VT00081") or null.
+// FEC stores names as "LAST, FIRST" so we search by last name first for reliability.
 async function findCandidateId(fullName, state, chamber) {
   const office = chamber === 'senate' ? 'S' : 'H';
-  try {
-    const data = await get('/candidates/search/', {
-      q: fullName, state: state.toUpperCase(), office,
-      has_raised_funds: true, sort: '-receipts', per_page: 5,
-    });
-    return data.results?.[0]?.candidate_id || null;
-  } catch (err) {
-    console.warn(`FEC candidate lookup failed for ${fullName} (${state}):`, err.message);
-    return null;
+  const lastName = fullName.trim().split(' ').pop();
+  const nameParts = fullName.toLowerCase().replace(/[^a-z ]/g, '').split(' ');
+
+  for (const query of [lastName, fullName]) {
+    try {
+      const data = await get('/candidates/search/', {
+        q: query, state: state.toUpperCase(), office,
+        sort: '-receipts', per_page: 10,
+      });
+      const results = data.results || [];
+      if (!results.length) continue;
+
+      // Prefer a result whose FEC name contains our last name
+      const match = results.find(r => {
+        const rn = (r.name || '').toLowerCase().replace(/[^a-z ]/g, '');
+        return nameParts.some(p => p.length > 2 && rn.includes(p));
+      }) || results[0];
+
+      console.log(`[FEC] Found ${match.name} (${match.candidate_id}) for "${fullName}"`);
+      return match.candidate_id;
+    } catch (err) {
+      console.warn(`[FEC] candidate search q="${query}" failed for ${fullName}:`, err.message);
+    }
   }
+  console.warn(`[FEC] No candidate found for "${fullName}" (${state} ${chamber})`);
+  return null;
 }
 
 // Returns principal campaign committee_id or null
@@ -83,4 +100,15 @@ async function getTopEmployers(committeeId) {
     .slice(0, 30);
 }
 
-module.exports = { findCandidateId, getCommitteeId, getTopEmployers };
+// Raw search for debugging — returns full FEC API response
+async function debugSearch(query, state, office) {
+  try {
+    return await get('/candidates/search/', {
+      q: query, state, office, sort: '-receipts', per_page: 10,
+    });
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+module.exports = { findCandidateId, getCommitteeId, getTopEmployers, debugSearch };

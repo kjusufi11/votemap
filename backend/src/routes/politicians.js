@@ -9,6 +9,23 @@ const mockData = require('../services/mockData');
 const { classifyVote, getAllDomains } = require('../services/domainClassifier');
 const { calculateAlignment } = require('../services/alignmentEngine');
 const { detectConflicts } = require('../services/conflictDetector');
+const fec = require('../services/fec');
+
+// GET /api/politicians/debug/fec?name=Ted+Cruz&state=TX&chamber=senate
+router.get('/debug/fec', async (req, res) => {
+  const { name, state, chamber } = req.query;
+  if (!name || !state) return res.status(400).json({ error: 'name and state required' });
+  const office = (chamber || 'senate') === 'senate' ? 'S' : 'H';
+  const lastName = name.trim().split(' ').pop();
+  const [byLast, byFull] = await Promise.all([
+    fec.debugSearch(lastName, state.toUpperCase(), office),
+    fec.debugSearch(name, state.toUpperCase(), office),
+  ]);
+  res.json({
+    byLastName: { query: lastName, results: byLast.results?.map(r => ({ candidate_id: r.candidate_id, name: r.name, state: r.state, office: r.office, receipts: r.receipts })) || byLast.error },
+    byFullName: { query: name, results: byFull.results?.map(r => ({ candidate_id: r.candidate_id, name: r.name, state: r.state, office: r.office, receipts: r.receipts })) || byFull.error },
+  });
+});
 
 // GET /api/politicians/debug/count — must be BEFORE /:id route
 router.get('/debug/count', async (req, res) => {
