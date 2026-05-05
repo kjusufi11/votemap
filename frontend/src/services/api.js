@@ -4,7 +4,7 @@
 
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const BASE_URL = import.meta.env.VITE_API_URL || 'https://votemap-production.up.railway.app/api';
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -101,7 +101,7 @@ export async function computeConflicts(politicianId, employers, fecCandidateId =
 }
 
 export async function getAlignmentForPolitician(politicianId, userId) {
-  const base = (import.meta.env.VITE_API_URL || 'https://api.votematch.app').replace(/\/api$/, '');
+  const base = (import.meta.env.VITE_API_URL || 'https://votemap-production.up.railway.app/api').replace(/\/api$/, '');
   const token = localStorage.getItem('votemap_token');
   try {
     const res = await fetch(`${base}/api/politicians/${politicianId}/alignment?userId=${userId}`, {
