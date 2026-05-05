@@ -396,7 +396,7 @@ export default function PoliticianProfile() {
           )}
 
           {/* FEC Conflicts of Interest */}
-          {(conflictsLoading || (conflicts?.conflicts?.length > 0)) && (
+          {(conflictsLoading || conflicts !== null) && (
             <Panel title="⚑ Conflicts of interest" titleColor="var(--gold)" headerBg="var(--gold-dim)">
               <div style={{ padding: '.875rem 1.25rem' }}>
                 {conflictsLoading ? (
@@ -406,7 +406,12 @@ export default function PoliticianProfile() {
                     <p style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginBottom: '1rem', lineHeight: 1.55 }}>
                       Top donor industries cross-referenced with voting record. Flagged when a politician votes with a donor industry's interests in {'>'}80% of relevant votes.
                     </p>
-                    {conflicts.conflicts.map((c, i) => {
+
+                    {conflicts.conflicts.length === 0 ? (
+                      <p style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', fontStyle: 'italic' }}>
+                        No high-threshold voting conflicts detected with top donor industries.
+                      </p>
+                    ) : conflicts.conflicts.map((c, i) => {
                       const d = getDomain(c.domain);
                       const pct = c.vote_alignment_pct;
                       return (
@@ -443,6 +448,20 @@ export default function PoliticianProfile() {
                         </div>
                       );
                     })}
+
+                    {conflicts.topDonors?.length > 0 && (
+                      <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+                        <p style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', marginBottom: '.5rem', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                          Top donor employers (2022–2024)
+                        </p>
+                        {conflicts.topDonors.map((d, i) => (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
+                            <span style={{ color: 'var(--text-2)' }}>{d.employer}</span>
+                            <span style={{ color: 'var(--text-3)' }}>${d.total.toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
