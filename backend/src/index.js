@@ -17,9 +17,13 @@ const PORT = process.env.PORT || 3001;
 app.set('trust proxy', 1);
 
 // CORS
-const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? [process.env.FRONTEND_URL, /\.railway\.app$/, /votematch\.app$/].filter(Boolean)
-  : ['http://localhost:3000', 'http://localhost:5173'];
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  /\.railway\.app$/,
+  /votematch\.app$/,
+  'http://localhost:3000',
+  'http://localhost:5173',
+].filter(Boolean);
 
 app.use(cors({
   origin: (origin, cb) => {
