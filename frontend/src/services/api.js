@@ -111,6 +111,23 @@ export async function getUpcoming(userId) {
   }
 }
 
+// ── Notification preferences ──────────────────────────────────────────────────
+
+function authHeader() {
+  const token = localStorage.getItem('votemap_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export async function getNotificationPrefs() {
+  const { data } = await api.get('/notifications/prefs', { headers: authHeader() });
+  return data;
+}
+
+export async function updateNotificationPrefs(prefs) {
+  const { data } = await api.patch('/notifications/prefs', prefs, { headers: authHeader() });
+  return data;
+}
+
 export async function getAlignmentForPolitician(politicianId, userId) {
   const base = (import.meta.env.VITE_API_URL || 'https://votemap-production.up.railway.app/api').replace(/\/api$/, '');
   const token = localStorage.getItem('votemap_token');

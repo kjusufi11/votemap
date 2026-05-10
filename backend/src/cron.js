@@ -4,9 +4,10 @@
 // Schedule: every night at 2:00 AM UTC
 
 require('dotenv').config();
-const sync   = require('./services/sync');
-const db     = require('./db');
-const mockData = require('./services/mockData');
+const sync        = require('./services/sync');
+const db          = require('./db');
+const mockData    = require('./services/mockData');
+const { runVoteAlerts } = require('./services/voteAlerts');
 
 async function run() {
   const startTime = Date.now();
@@ -52,7 +53,16 @@ async function run() {
 
     console.log(`\n[CRON] ✓ Synced ~${votesTotal} votes (${errors} errors)`);
 
-    // 3. Invalidate stale AI analysis so it gets regenerated on next view
+    // 3. Send email alerts for new votes
+    console.log('\n[CRON] Running vote alerts...');
+    try {
+      const alerts = await runVoteAlerts();
+      console.log(`[CRON] ✓ Sent ${alerts.postVote} vote alerts, ${alerts.upcoming} upcoming alerts`);
+    } catch (err) {
+      console.error('[CRON] Vote alerts error:', err.message);
+    }
+
+    // 4. Invalidate stale AI analysis so it gets regenerated on next view
     // (only invalidate if new votes were found)
     if (votesTotal > 0) {
       await db.query(`

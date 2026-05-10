@@ -132,6 +132,25 @@ const migrations = [
     computed_at      TIMESTAMPTZ DEFAULT NOW()
   )`,
 
+  // ── Email Notifications ────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS user_notification_prefs (
+    user_id           TEXT PRIMARY KEY,
+    vote_alerts       BOOLEAN DEFAULT true,
+    unsubscribe_token TEXT UNIQUE NOT NULL,
+    created_at        TIMESTAMPTZ DEFAULT NOW()
+  )`,
+
+  // Dedup table — prevents sending the same vote alert twice to the same user
+  `CREATE TABLE IF NOT EXISTS email_notifications_sent (
+    id           SERIAL PRIMARY KEY,
+    user_id      TEXT NOT NULL,
+    vote_id      INTEGER NOT NULL,
+    sent_at      TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, vote_id)
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS notif_sent_user_idx ON email_notifications_sent(user_id)`,
+
   // ── Schema patches ────────────────────────────────────────────────────────
   // Add flag column to bias_scores (for corruption/foreign influence tagging)
   `ALTER TABLE bias_scores ADD COLUMN IF NOT EXISTS flag TEXT`,

@@ -5,6 +5,14 @@ const router  = express.Router();
 const crypto  = require('crypto');
 const db      = require('../db');
 
+async function createDefaultNotificationPrefs(userId) {
+  const token = crypto.randomBytes(20).toString('hex');
+  await db.query(`
+    INSERT INTO user_notification_prefs (user_id, vote_alerts, unsubscribe_token)
+    VALUES ($1, true, $2) ON CONFLICT DO NOTHING
+  `, [String(userId), token]).catch(() => {});
+}
+
 const JWT_SECRET = process.env.JWT_SECRET || 'votematch-dev-secret';
 
 // Simple JWT implementation using built-in crypto
@@ -55,6 +63,7 @@ router.post('/signup', async (req, res) => {
       [email.toLowerCase(), hash]
     );
     const user = result.rows[0];
+    await createDefaultNotificationPrefs(user.id);
     const token = createToken({ userId: user.id, email: user.email });
     res.json({ token, user: { id: String(user.id), email: user.email } });
   } catch (err) {

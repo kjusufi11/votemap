@@ -74,6 +74,17 @@ async function getVoteDetail(congress, chamber, session, rollCall) {
 
 // ── Bills ─────────────────────────────────────────────────────────────────────
 
+// Get recently updated bills — used to surface upcoming/new legislation
+async function getRecentBills(congress, daysBack = 4) {
+  const from = new Date(Date.now() - daysBack * 86400000).toISOString().split('T')[0];
+  const data = await get(`/bill/${congress}`, {
+    sort: 'updateDate+desc',
+    limit: 100,
+    fromDateTime: `${from}T00:00:00Z`,
+  }, 3600);
+  return data.bills || [];
+}
+
 async function getMemberSponsoredBills(bioguideId) {
   const data = await get(`/member/${bioguideId}/sponsored-legislation`, { limit: 50 });
   return data.sponsoredLegislation || [];
@@ -194,6 +205,7 @@ module.exports = {
   getMemberVotes,
   getRecentVotes,
   getVoteDetail,
+  getRecentBills,
   getMemberSponsoredBills,
   getBill,
   normalizeMember,

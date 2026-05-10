@@ -1,7 +1,7 @@
 import { useAuth } from '../contexts/AuthContext';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { saveSurvey, getSurvey } from '../services/api';
+import { saveSurvey, getSurvey, getNotificationPrefs, updateNotificationPrefs } from '../services/api';
 
 const ISSUES = [
   {
@@ -125,12 +125,14 @@ const IMPORTANCE_LABELS = {
 export default function Survey() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [answers, setAnswers]     = useState({});
-  const [importance, setImportance] = useState({});
-  const [step, setStep]           = useState(0);
-  const [saving, setSaving]       = useState(false);
-  const [loading, setLoading]     = useState(true);
-  const [saved, setSaved]         = useState(false);
+  const [answers, setAnswers]         = useState({});
+  const [importance, setImportance]   = useState({});
+  const [step, setStep]               = useState(0);
+  const [saving, setSaving]           = useState(false);
+  const [loading, setLoading]         = useState(true);
+  const [saved, setSaved]             = useState(false);
+  const [alertsEnabled, setAlertsEnabled] = useState(null);
+  const [alertsToggling, setAlertsToggling] = useState(false);
 
   const totalSteps  = ISSUES.length;
   const currentIssue = ISSUES[step - 1];
@@ -142,17 +144,29 @@ export default function Survey() {
         if (existing?.answers) {
           setAnswers(existing.answers);
           setImportance(existing.importance || {});
-          // If all questions answered, show completion screen
           const answeredCount = Object.keys(existing.answers).length;
           if (answeredCount >= ISSUES.length) {
             setStep(ISSUES.length + 1);
           }
         }
       } catch {}
+      try {
+        const prefs = await getNotificationPrefs();
+        setAlertsEnabled(prefs.vote_alerts ?? true);
+      } catch {}
       setLoading(false);
     }
     if (user) load();
   }, [user]);
+
+  async function toggleAlerts(enabled) {
+    setAlertsToggling(true);
+    try {
+      await updateNotificationPrefs({ vote_alerts: enabled });
+      setAlertsEnabled(enabled);
+    } catch {}
+    setAlertsToggling(false);
+  }
 
   function handleAnswer(issueId, value) {
     setAnswers(prev => ({ ...prev, [issueId]: value }));
@@ -251,6 +265,40 @@ export default function Survey() {
             }}>Update my answers</button>
           </div>
         </div>
+
+        {/* Email alerts toggle */}
+        {alertsEnabled !== null && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: '1rem', padding: '1rem 1.25rem', marginBottom: '2rem',
+            background: 'var(--bg-2)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow)',
+          }}>
+            <div>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: 'var(--text)' }}>Vote alerts</p>
+              <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5 }}>
+                Email me when reps vote on my priority issues
+              </p>
+            </div>
+            <button
+              onClick={() => toggleAlerts(!alertsEnabled)}
+              disabled={alertsToggling}
+              style={{
+                width: 44, height: 24, borderRadius: 12, border: 'none',
+                background: alertsEnabled ? 'var(--text)' : 'var(--bg-3)',
+                cursor: 'pointer', position: 'relative', flexShrink: 0,
+                transition: 'background var(--transition)', opacity: alertsToggling ? 0.5 : 1,
+              }}
+              aria-label={alertsEnabled ? 'Disable vote alerts' : 'Enable vote alerts'}
+            >
+              <span style={{
+                position: 'absolute', top: 3, width: 18, height: 18, borderRadius: '50%',
+                background: 'var(--bg)', transition: 'left var(--transition)',
+                left: alertsEnabled ? 23 : 3,
+              }} />
+            </button>
+          </div>
+        )}
 
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>

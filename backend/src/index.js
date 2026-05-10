@@ -4,12 +4,13 @@ const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 
-const lookupRoutes     = require('./routes/lookup');
-const politicianRoutes = require('./routes/politicians');
-const surveyRoutes     = require('./routes/survey');
-const authRoutes       = require('./routes/auth');
-const adminRoutes      = require('./routes/admin');
-const upcomingRoutes   = require('./routes/upcoming');
+const lookupRoutes        = require('./routes/lookup');
+const politicianRoutes    = require('./routes/politicians');
+const surveyRoutes        = require('./routes/survey');
+const authRoutes          = require('./routes/auth');
+const adminRoutes         = require('./routes/admin');
+const upcomingRoutes      = require('./routes/upcoming');
+const notificationsRoutes = require('./routes/notifications');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -59,6 +60,7 @@ app.use('/api/survey', surveyRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/upcoming', upcomingRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

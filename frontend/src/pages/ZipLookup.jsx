@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { lookupZip, getErrorMessage } from '../services/api';
 
 const EXAMPLES = ['10001', '90210', '60601', '77001', '02101'];
@@ -9,6 +9,8 @@ export default function ZipLookup() {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
   const navigate              = useNavigate();
+  const [params]              = useSearchParams();
+  const unsubscribed          = params.get('unsubscribed') === '1';
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -26,6 +28,16 @@ export default function ZipLookup() {
 
   return (
     <main style={{ minHeight: 'calc(100vh - 54px)', display: 'flex', flexDirection: 'column' }}>
+
+      {unsubscribed && (
+        <div style={{
+          textAlign: 'center', padding: '10px', fontSize: 13,
+          background: 'var(--bg-2)', borderBottom: '1px solid var(--border)',
+          color: 'var(--text-2)',
+        }}>
+          You've been unsubscribed from vote alerts. You can re-enable them in your <a href="/survey" style={{ color: 'var(--text)' }}>survey settings</a>.
+        </div>
+      )}
 
       {/* Hero */}
       <section style={{
