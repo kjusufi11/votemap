@@ -148,17 +148,18 @@ async function upsertMember(m) {
   await db.query(`
     INSERT INTO politicians (
       id, full_name, first_name, last_name, party, state, chamber, district,
-      title, in_office, url, total_votes, missed_votes_pct, party_loyalty_pct, last_synced
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,0,0,NOW())
+      title, in_office, url, next_election, total_votes, missed_votes_pct, party_loyalty_pct, last_synced
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,0,0,0,NOW())
     ON CONFLICT (id) DO UPDATE SET
       full_name=$2, first_name=$3, last_name=$4,
       party=$5, state=$6, chamber=$7, district=$8,
       title=$9, in_office=$10, url=$11,
+      next_election=COALESCE($12, politicians.next_election),
       last_synced=NOW()
   `, [
     m.id, m.full_name, m.first_name, m.last_name,
     m.party, m.state, m.chamber, m.district,
-    m.title, m.in_office, m.url,
+    m.title, m.in_office, m.url, m.next_election || null,
   ]);
 }
 

@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const db = require('../db');
 const { rebuildVotes, syncSingleSenatorVotes, progress } = require('../services/voteRebuild');
+const { syncMembers } = require('../services/sync');
 
 // POST /api/admin/rebuild-votes
 router.post('/rebuild-votes', (req, res) => {
@@ -62,6 +63,40 @@ router.post('/sync-senator-votes/:id', async (req, res) => {
     politician: pol,
     message: `Syncing Senate votes for ${pol.full_name} (${pol.last_name}, ${pol.state}). Poll /api/admin/rebuild-status for log.`,
   });
+});
+
+// POST /api/admin/sync-members
+// Re-syncs all current members from Congress.gov (both chambers).
+// Populates next_election from term end year. Safe to call repeatedly.
+router.post('/sync-members', async (req, res) => {
+  // Fire and forget — sync can take 30+ seconds
+  syncMembers('both')
+    .then(async total => {
+      const { rows } = await db.query(`
+        SELECT next_election, COUNT(*) as count
+        FROM politicians
+        WHERE in_office = true AND next_election IS NOT NULL
+        GROUP BY next_election
+        ORDER BY next_election
+      `);
+      console.log(`[admin] sync-members complete. ${total} members synced. Election years:`, rows);
+    })
+    .catch(err => console.error('[admin] sync-members failed:', err.message));
+
+  res.json({ started: true, message: 'Member sync started in background. next_election will be populated from Congress.gov term data.' });
+});
+
+// GET /api/admin/election-summary
+// Shows the current next_election breakdown in the DB.
+router.get('/election-summary', async (req, res) => {
+  const { rows } = await db.query(`
+    SELECT next_election, chamber, COUNT(*) as count
+    FROM politicians
+    WHERE in_office = true
+    GROUP BY next_election, chamber
+    ORDER BY next_election NULLS LAST, chamber
+  `);
+  res.json(rows);
 });
 
 module.exports = router;

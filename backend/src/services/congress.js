@@ -91,6 +91,12 @@ function normalizeMember(m) {
   const currentTerm = m.terms?.item?.[m.terms.item.length - 1] || {};
   const chamber = currentTerm.chamber?.toLowerCase().includes('senate') ? 'senate' : 'house';
 
+  // endYear is the January a term expires; the election is November of (endYear - 1).
+  // e.g. Senate Class 2: endYear 2027 → next_election 2026
+  //      House 119th:     endYear 2027 → next_election 2026
+  const endYear = currentTerm.endYear ? parseInt(currentTerm.endYear) : null;
+  const nextElection = endYear ? String(endYear - 1) : null;
+
   return {
     id: m.bioguideId,
     full_name: m.directOrderName || `${m.firstName} ${m.lastName}`,
@@ -103,6 +109,7 @@ function normalizeMember(m) {
     title: chamber === 'senate' ? 'Sen.' : 'Rep.',
     in_office: m.currentMember !== false,
     url: m.officialWebsiteUrl || null,
+    next_election: nextElection,
     total_votes: 0,
     missed_votes_pct: 0,
     party_loyalty_pct: 0,
