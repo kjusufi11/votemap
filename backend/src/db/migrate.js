@@ -156,6 +156,10 @@ const migrations = [
   `ALTER TABLE bias_scores ADD COLUMN IF NOT EXISTS flag TEXT`,
 ];
 
+function getMigrations() {
+  return migrations;
+}
+
 async function migrate() {
   const client = await pool.connect();
   try {
@@ -175,4 +179,7 @@ async function migrate() {
   }
 }
 
-migrate();
+module.exports = { getMigrations };
+
+// Run directly when called as a script
+if (require.main === module) migrate();

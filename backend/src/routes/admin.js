@@ -17,6 +17,25 @@ router.get('/rebuild-status', (req, res) => {
   res.json(progress);
 });
 
+// POST /api/admin/run-migrate — runs all migrations (idempotent, safe to re-run)
+router.post('/run-migrate', async (req, res) => {
+  const results = [];
+  try {
+    const migrations = require('../db/migrate').getMigrations();
+    for (const sql of migrations) {
+      try {
+        await db.query(sql);
+        results.push({ ok: true, sql: sql.slice(0, 60).replace(/\n/g, ' ').trim() });
+      } catch (err) {
+        results.push({ ok: false, sql: sql.slice(0, 60).replace(/\n/g, ' ').trim(), error: err.message });
+      }
+    }
+    res.json({ done: true, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PATCH /api/admin/fix-politician
 // Corrects bad field values (chamber, state, title, last_name) on a politician record.
 router.patch('/fix-politician', async (req, res) => {
