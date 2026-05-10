@@ -1,6 +1,6 @@
 import React from 'react';
 
-const CATEGORY_LABELS = {
+export const CATEGORY_LABELS = {
   // biasEngine categories
   reproductive_rights:  'Reproductive Rights',
   gun_control:          'Gun Policy',

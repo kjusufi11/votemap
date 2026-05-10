@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import BiasBar from '../components/BiasBar';
+import BiasBar, { CATEGORY_LABELS } from '../components/BiasBar';
 import Avatar from '../components/Avatar';
 import { useAuth } from '../contexts/AuthContext';
 import { getPolitician, getPoliticianVotes, triggerAnalysis, getErrorMessage, getConflicts, computeConflicts, getSurvey } from '../services/api';
@@ -47,6 +47,18 @@ const voteColor = pos => pos === 'Yes' || pos === 'Yea' ? 'var(--green)' : pos =
 const voteShort = pos => pos === 'Yes' || pos === 'Yea' ? 'YEA' : pos === 'No' || pos === 'Nay' ? 'NAY' : pos === 'Not Voting' ? 'ABS' : 'PRE';
 
 const SUBJECTS = ['', 'Health', 'Armed Forces', 'Taxation', 'Environmental', 'Immigration', 'Crime', 'Civil Rights', 'International', 'Education', 'Finance', 'Energy'];
+
+// Multiple raw categories can map to the same display label (e.g. foreign_policy +
+// defense_spending both → "Defense & Foreign Policy"). Keep the one with most votes.
+function dedupeByLabel(biasArr) {
+  const seen = new Map();
+  for (const b of biasArr) {
+    const label = CATEGORY_LABELS[b.category] || b.label;
+    const prev  = seen.get(label);
+    if (!prev || (b.vote_count || 0) > (prev.vote_count || 0)) seen.set(label, b);
+  }
+  return Array.from(seen.values());
+}
 
 export default function PoliticianProfile() {
   const { id } = useParams();
@@ -214,9 +226,9 @@ export default function PoliticianProfile() {
   }
 
   // These must be before early returns to satisfy rules of hooks
-  const corruptionBiases = biases.filter(b => b.flag === 'corruption');
-  const foreignBiases    = biases.filter(b => b.flag === 'foreign');
-  const standardBiases   = biases.filter(b => !b.flag);
+  const corruptionBiases = dedupeByLabel(biases.filter(b => b.flag === 'corruption'));
+  const foreignBiases    = dedupeByLabel(biases.filter(b => b.flag === 'foreign'));
+  const standardBiases   = dedupeByLabel(biases.filter(b => !b.flag));
   const hasSurvey = !!(userSurvey?.importance && Object.keys(userSurvey.importance).length > 0);
   const { importantBiases, otherBiases } = useMemo(() => {
     if (!hasSurvey || standardBiases.length === 0) return { importantBiases: standardBiases, otherBiases: [] };
