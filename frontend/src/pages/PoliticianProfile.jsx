@@ -46,7 +46,22 @@ const PL = { D: 'Democrat', R: 'Republican', I: 'Independent' };
 const voteColor = pos => pos === 'Yes' || pos === 'Yea' ? 'var(--green)' : pos === 'No' || pos === 'Nay' ? 'var(--red)' : pos === 'Not Voting' ? 'var(--text-3)' : 'var(--amber)';
 const voteShort = pos => pos === 'Yes' || pos === 'Yea' ? 'YEA' : pos === 'No' || pos === 'Nay' ? 'NAY' : pos === 'Not Voting' ? 'ABS' : 'PRE';
 
-const SUBJECTS = ['', 'Health', 'Armed Forces', 'Taxation', 'Environmental', 'Immigration', 'Crime', 'Civil Rights', 'International', 'Education', 'Finance', 'Energy'];
+// Domain filter options — keys match classifyVote() return values
+const DOMAIN_FILTERS = [
+  { value: '', label: 'All subjects' },
+  { value: 'healthcare',        label: 'Healthcare' },
+  { value: 'climate',           label: 'Climate & Energy' },
+  { value: 'economy',           label: 'Economy & Taxes' },
+  { value: 'immigration',       label: 'Immigration' },
+  { value: 'gun_policy',        label: 'Gun Policy' },
+  { value: 'defense',           label: 'Defense & Foreign Policy' },
+  { value: 'reproductive_rights', label: 'Reproductive Rights' },
+  { value: 'education',         label: 'Education' },
+  { value: 'safety_net',        label: 'Social Safety Net' },
+  { value: 'criminal_justice',  label: 'Criminal Justice' },
+  { value: 'voting_rights',     label: 'Voting & Democracy' },
+  { value: 'infrastructure',    label: 'Infrastructure' },
+];
 
 // Multiple raw categories can map to the same display label (e.g. foreign_policy +
 // defense_spending both → "Defense & Foreign Policy"). Keep the one with most votes.
@@ -210,10 +225,9 @@ export default function PoliticianProfile() {
   const filteredVotes = useMemo(() => {
     return allVotes.filter(v => {
       const title = (v.short_title || v.title || v.description || '').toLowerCase();
-      const subject = (v.primary_subject || '').toLowerCase();
-      if (search && !title.includes(search.toLowerCase()) && !subject.includes(search.toLowerCase())) return false;
+      if (search && !title.includes(search.toLowerCase())) return false;
       if (posFilter && v.position !== posFilter) return false;
-      if (subFilter && !subject.includes(subFilter.toLowerCase())) return false;
+      if (subFilter && classifyVote(v) !== subFilter) return false;
       return true;
     });
   }, [allVotes, search, posFilter, subFilter]);
@@ -578,7 +592,7 @@ export default function PoliticianProfile() {
                   <option value="Not Voting">Abstain only</option>
                 </select>
                 <select value={subFilter} onChange={e => handleFilterChange(setSubFilter)(e.target.value)} style={{ fontSize: 12, fontFamily: 'var(--font-mono)', border: '1px solid var(--border-med)', borderRadius: 'var(--radius)', padding: '5px 8px', background: 'var(--bg-2)', outline: 'none', cursor: 'pointer' }}>
-                  {SUBJECTS.map(s => <option key={s} value={s}>{s || 'All subjects'}</option>)}
+                  {DOMAIN_FILTERS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
                 </select>
               </div>
               {pagedVotes.length === 0 ? (

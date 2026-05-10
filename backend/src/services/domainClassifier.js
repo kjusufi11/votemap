@@ -183,7 +183,8 @@ function effectivePosition(vote) {
   const desc = (vote.description || '').toLowerCase();
   const inverted =
     /\bcongressional disapproval\b/.test(desc) ||
-    /^to (terminate|eliminate|abolish|defund)\b/.test(desc);
+    /^to (terminate|eliminate|abolish|defund)\b/.test(desc) ||
+    /^to (cut|reduce|slash)\b.*(funding|budget|appropriat|spending)\b/.test(desc);
   if (!inverted) return vote.position;
   return vote.position === 'Yes' ? 'No' : 'Yes';
 }

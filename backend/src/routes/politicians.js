@@ -127,7 +127,7 @@ router.get('/:id/alignment', async (req, res) => {
 
     const PROGRESSIVE_IS_YES = {
       healthcare: true, climate: true, immigration: false, gun_policy: true,
-      economy: true, defense: false, reproductive_rights: true, education: true,
+      economy: true, defense: true, reproductive_rights: true, education: true,
       safety_net: true, criminal_justice: false, voting_rights: true, infrastructure: true,
     };
 
