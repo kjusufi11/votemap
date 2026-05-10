@@ -154,6 +154,20 @@ router.post('/populate-elections', async (req, res) => {
   res.json({ started: true, total: 'check logs', message: 'populate-elections running in background' });
 });
 
+// GET /api/admin/bills-debug
+router.get('/bills-debug', async (req, res) => {
+  const [countResult, joinResult, sampleResult] = await Promise.all([
+    db.query('SELECT COUNT(*) FROM bills'),
+    db.query('SELECT COUNT(*) FROM votes WHERE bill_id IS NOT NULL'),
+    db.query('SELECT id, number, title, primary_subject FROM bills LIMIT 5'),
+  ]);
+  res.json({
+    total_bills: countResult.rows[0].count,
+    votes_with_bill_id: joinResult.rows[0].count,
+    sample_bills: sampleResult.rows,
+  });
+});
+
 // GET /api/admin/election-summary
 // Shows the current next_election breakdown in the DB.
 router.get('/election-summary', async (req, res) => {
