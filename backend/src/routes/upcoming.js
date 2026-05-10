@@ -88,23 +88,27 @@ router.get('/', async (req, res) => {
 
     if (subjectSet.size > 0) {
       const subjects = Array.from(subjectSet);
-      // Bills table populated from senate/house clerk feeds; no date linkage to votes.
-      // Order by id DESC (IDs are sequential, higher = more recently inserted roll call).
       const billsResult = await db.query(`
-        SELECT DISTINCT ON (title) id, bill_id, number, title, short_title,
-               primary_subject, categories, introduced_date, last_vote_date, status, congress
-        FROM bills
-        WHERE primary_subject = ANY($1)
-        ORDER BY title, id DESC
+        SELECT * FROM (
+          SELECT DISTINCT ON (title) id, bill_id, number, title, short_title,
+                 primary_subject, categories, introduced_date, last_vote_date, status, congress
+          FROM bills
+          WHERE primary_subject = ANY($1)
+          ORDER BY title, id DESC
+        ) sub
+        ORDER BY id DESC
         LIMIT 30
       `, [subjects]);
       bills = billsResult.rows;
     } else {
       const billsResult = await db.query(`
-        SELECT DISTINCT ON (title) id, bill_id, number, title, short_title,
-               primary_subject, categories, introduced_date, last_vote_date, status, congress
-        FROM bills
-        ORDER BY title, id DESC
+        SELECT * FROM (
+          SELECT DISTINCT ON (title) id, bill_id, number, title, short_title,
+                 primary_subject, categories, introduced_date, last_vote_date, status, congress
+          FROM bills
+          ORDER BY title, id DESC
+        ) sub
+        ORDER BY id DESC
         LIMIT 30
       `);
       bills = billsResult.rows;
