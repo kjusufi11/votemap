@@ -30,17 +30,26 @@ router.get('/', async (req, res) => {
     const currentYear = new Date().getFullYear();
     const electionYears = [String(currentYear), String(currentYear + 1)];
 
-    const electionsResult = await db.query(`
-      SELECT id, full_name, first_name, last_name, party, state, chamber,
-             district, title, total_votes, party_loyalty_pct, next_election
-      FROM politicians
-      WHERE in_office = true
-        AND next_election = ANY($1)
-      ORDER BY state, chamber DESC, last_name
-      LIMIT 200
-    `, [electionYears]);
+    // Query senate and house separately so senate seats are never truncated by house volume
+    const [senateResult, houseResult] = await Promise.all([
+      db.query(`
+        SELECT id, full_name, first_name, last_name, party, state, chamber,
+               district, title, total_votes, party_loyalty_pct, next_election
+        FROM politicians
+        WHERE in_office = true AND chamber = 'senate' AND next_election = ANY($1)
+        ORDER BY state, last_name
+      `, [electionYears]),
+      db.query(`
+        SELECT id, full_name, first_name, last_name, party, state, chamber,
+               district, title, total_votes, party_loyalty_pct, next_election
+        FROM politicians
+        WHERE in_office = true AND chamber = 'house' AND next_election = ANY($1)
+        ORDER BY state, last_name
+        LIMIT 300
+      `, [electionYears]),
+    ]);
 
-    let politicians = electionsResult.rows;
+    let politicians = [...senateResult.rows, ...houseResult.rows];
 
     // ── Alignment scores for election politicians (if user logged in) ─────────
     if (userId && politicians.length > 0) {
@@ -80,26 +89,30 @@ router.get('/', async (req, res) => {
     if (subjectSet.size > 0) {
       const subjects = Array.from(subjectSet);
       const billsResult = await db.query(`
-        SELECT id, bill_id, number, title, short_title, primary_subject,
-               categories, introduced_date, last_vote_date, status, congress
-        FROM bills
-        WHERE primary_subject = ANY($1)
-          AND introduced_date > NOW() - INTERVAL '365 days'
-        ORDER BY COALESCE(last_vote_date, introduced_date) DESC NULLS LAST
+        SELECT b.id, b.bill_id, b.number, b.title, b.short_title, b.primary_subject,
+               b.categories, b.introduced_date, b.last_vote_date, b.status, b.congress,
+               MAX(v.vote_date) AS latest_vote_date
+        FROM bills b
+        JOIN votes v ON v.bill_id = b.id
+        WHERE b.primary_subject = ANY($1)
+        GROUP BY b.id
+        ORDER BY MAX(v.vote_date) DESC NULLS LAST
         LIMIT 30
       `, [subjects]);
-      bills = billsResult.rows;
+      bills = billsResult.rows.map(r => ({ ...r, last_vote_date: r.last_vote_date || r.latest_vote_date }));
     } else {
-      // No priorities — show most recently active bills across all subjects
+      // No priorities — show most recently voted-on bills
       const billsResult = await db.query(`
-        SELECT id, bill_id, number, title, short_title, primary_subject,
-               categories, introduced_date, last_vote_date, status, congress
-        FROM bills
-        WHERE introduced_date > NOW() - INTERVAL '180 days'
-        ORDER BY COALESCE(last_vote_date, introduced_date) DESC NULLS LAST
+        SELECT b.id, b.bill_id, b.number, b.title, b.short_title, b.primary_subject,
+               b.categories, b.introduced_date, b.last_vote_date, b.status, b.congress,
+               MAX(v.vote_date) AS latest_vote_date
+        FROM bills b
+        JOIN votes v ON v.bill_id = b.id
+        GROUP BY b.id
+        ORDER BY MAX(v.vote_date) DESC NULLS LAST
         LIMIT 30
       `);
-      bills = billsResult.rows;
+      bills = billsResult.rows.map(r => ({ ...r, last_vote_date: r.last_vote_date || r.latest_vote_date }));
     }
 
     res.json({
