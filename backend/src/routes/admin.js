@@ -120,6 +120,40 @@ router.get('/debug-member-list', async (req, res) => {
   }
 });
 
+// POST /api/admin/populate-elections
+// Iterates every politician in the DB, fetches their individual Congress.gov record,
+// and updates next_election. Runs in background; poll /rebuild-status for progress.
+router.post('/populate-elections', async (req, res) => {
+  const congress = require('../services/congress');
+
+  async function run() {
+    const { rows } = await db.query('SELECT id, full_name, chamber FROM politicians WHERE in_office = true ORDER BY chamber, id');
+    console.log(`[populate-elections] Starting for ${rows.length} politicians`);
+    let updated = 0, errors = 0;
+
+    for (const pol of rows) {
+      try {
+        const member = await congress.getMember(pol.id);
+        if (!member) { errors++; continue; }
+        const norm = congress.normalizeMember(member);
+        if (norm.next_election) {
+          await db.query('UPDATE politicians SET next_election = $1 WHERE id = $2', [norm.next_election, pol.id]);
+          updated++;
+        }
+      } catch (err) {
+        console.warn(`[populate-elections] ${pol.id} (${pol.full_name}): ${err.message}`);
+        errors++;
+      }
+      // small delay to avoid hammering the API
+      await new Promise(r => setTimeout(r, 150));
+    }
+    console.log(`[populate-elections] Done. updated=${updated} errors=${errors}`);
+  }
+
+  run().catch(err => console.error('[populate-elections] Fatal:', err.message));
+  res.json({ started: true, total: 'check logs', message: 'populate-elections running in background' });
+});
+
 // GET /api/admin/election-summary
 // Shows the current next_election breakdown in the DB.
 router.get('/election-summary', async (req, res) => {

@@ -87,15 +87,51 @@ async function getBill(congress, billType, billNumber) {
 // ── Normalize ─────────────────────────────────────────────────────────────────
 
 function normalizeMember(m) {
-  // Congress.gov member structure
-  const currentTerm = m.terms?.item?.[m.terms.item.length - 1] || {};
+  // Congress.gov returns terms as a flat array on the individual-member endpoint,
+  // or wrapped as {item:[...]} on the bulk list endpoint. Handle both.
+  const termsRaw = m.terms;
+  const termsArr = Array.isArray(termsRaw)
+    ? termsRaw
+    : (Array.isArray(termsRaw?.item) ? termsRaw.item : []);
+
+  // Use the last term to derive chamber / district / state
+  const currentTerm = termsArr.length ? termsArr[termsArr.length - 1] : {};
   const chamber = currentTerm.chamber?.toLowerCase().includes('senate') ? 'senate' : 'house';
 
-  // endYear is the January a term expires; the election is November of (endYear - 1).
-  // e.g. Senate Class 2: endYear 2027 → next_election 2026
-  //      House 119th:     endYear 2027 → next_election 2026
-  const endYear = currentTerm.endYear ? parseInt(currentTerm.endYear) : null;
-  const nextElection = endYear ? String(endYear - 1) : null;
+  // Compute next election year.
+  //   House:   always the next even year (every 2 years).
+  //   Senate:  senators run on a 6-year cycle. We determine the cycle from the
+  //            startYear of their EARLIEST term entry, which lets us reconstruct
+  //            which election years belong to their class.
+  //            Note: ~5 senators who held stub/appointed terms before winning a
+  //            full term may show an off-by-2-years result; these can be
+  //            corrected via PATCH /api/admin/fix-politician.
+  let nextElection = null;
+  const today = new Date();
+  const yr = today.getFullYear();
+  const mo = today.getMonth() + 1; // 1-12
+  const ELECTION_MONTH = 11;        // November
+
+  if (chamber === 'house') {
+    // Next even-year general election that hasn't happened yet
+    let ey = yr % 2 === 0 ? yr : yr + 1;
+    if (ey === yr && mo > ELECTION_MONTH) ey += 2;
+    nextElection = String(ey);
+  } else {
+    // Senate 6-year cycle
+    const firstStartYear = termsArr.length
+      ? Math.min(...termsArr.map(t => t.startYear || 9999))
+      : null;
+    if (firstStartYear && firstStartYear < 9999) {
+      let ey = firstStartYear - 1; // first election year (Nov before start)
+      while (true) {
+        if (ey > yr) break;
+        if (ey === yr && mo <= ELECTION_MONTH) break;
+        ey += 6;
+      }
+      nextElection = String(ey);
+    }
+  }
 
   return {
     id: m.bioguideId,
@@ -103,7 +139,7 @@ function normalizeMember(m) {
     first_name: m.firstName,
     last_name: m.lastName,
     party: normalizeParty(m.partyHistory?.[0]?.partyAbbreviation || m.party),
-    state: currentTerm.stateCode || m.state,
+    state: currentTerm.stateCode || m.state || m.state,
     chamber,
     district: currentTerm.district || null,
     title: chamber === 'senate' ? 'Sen.' : 'Rep.',

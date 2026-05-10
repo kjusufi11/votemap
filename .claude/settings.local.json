@@ -73,7 +73,17 @@
       "PowerShell(Invoke-RestMethod -Uri \"https://votemap-production.up.railway.app/api/admin/rebuild-status\" | ConvertTo-Json -Depth 3)",
       "WebFetch(domain:votemap-production.up.railway.app)",
       "WebFetch(domain:api.fec.gov)",
-      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\krena\\\\AppData\\\\Local\" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match \"git|github\" } | Select-Object FullName)"
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\krena\\\\AppData\\\\Local\" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match \"git|github\" } | Select-Object FullName)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\" -Recurse -Directory | Select-Object -First 50 | ForEach-Object { $_.FullName -replace [regex]::Escape\\(\"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\"\\), \".\" } | Sort-Object)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\" -Depth 2 | Where-Object { -not $_.FullName.Contains\\('node_modules'\\) } | Select-Object FullName | ForEach-Object { $_.FullName -replace [regex]::Escape\\(\"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\"\\), \".\" })",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\\\\frontend\\\\src\" -Recurse -File | Where-Object { $_.Extension -match '\\\\.\\(jsx|js|tsx|ts\\)$' } | Select-Object FullName | ForEach-Object { $_.FullName -replace [regex]::Escape\\(\"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\"\\), \".\" })",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\\\\backend\\\\src\" -Recurse -File | Where-Object { $_.Extension -match '\\\\.\\(js|ts\\)$' } | Select-Object FullName | ForEach-Object { $_.FullName -replace [regex]::Escape\\(\"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\"\\), \".\" })",
+      "PowerShell($env:PATH -split ';')",
+      "PowerShell(powershell -ExecutionPolicy Bypass -Command \"railway --version 2>&1\")",
+      "WebFetch(domain:api.votematch.app)",
+      "PowerShell($env:PATH += \";C:\\\\Program Files\\\\Git\\\\cmd;C:\\\\Program Files\\\\Git\\\\bin\"; where.exe git)",
+      "PowerShell(Get-Content *)",
+      "PowerShell(Invoke-RestMethod -Uri \"https://votemap-production.up.railway.app/health\" -TimeoutSec 10 | ConvertTo-Json)"
     ]
   }
 }
