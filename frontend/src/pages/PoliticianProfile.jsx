@@ -213,22 +213,10 @@ export default function PoliticianProfile() {
     return (val) => { setter(val); setVotePage(0); };
   }
 
-  if (loading) return <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--text-3)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>Loading profile…</div>;
-  if (error)   return <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--red)', fontSize: 14 }}>{error} — <Link to="/">Go home</Link></div>;
-  if (!pol)    return null;
-
-  const ini = `${pol.first_name?.[0] || ''}${pol.last_name?.[0] || ''}`;
-  const dw  = pol.dw_nominate;
-  const dwPct = dw != null ? ((dw + 1) / 2 * 100).toFixed(1) : null;
-  const dwColor = dw < -.1 ? 'var(--blue)' : dw > .1 ? 'var(--red)' : 'var(--amber)';
-
+  // These must be before early returns to satisfy rules of hooks
   const corruptionBiases = biases.filter(b => b.flag === 'corruption');
   const foreignBiases    = biases.filter(b => b.flag === 'foreign');
   const standardBiases   = biases.filter(b => !b.flag);
-
-  // Alignment score color
-  const scoreColor = alignment?.score >= 70 ? 'var(--green)' : alignment?.score >= 45 ? 'var(--amber)' : 'var(--red)';
-
   const hasSurvey = !!(userSurvey?.importance && Object.keys(userSurvey.importance).length > 0);
   const { importantBiases, otherBiases } = useMemo(() => {
     if (!hasSurvey || standardBiases.length === 0) return { importantBiases: standardBiases, otherBiases: [] };
@@ -242,6 +230,18 @@ export default function PoliticianProfile() {
     const impSet = new Set(important.map(b => b.category));
     return { importantBiases: important, otherBiases: standardBiases.filter(b => !impSet.has(b.category)) };
   }, [standardBiases, hasSurvey, userSurvey]);
+
+  if (loading) return <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--text-3)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>Loading profile…</div>;
+  if (error)   return <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--red)', fontSize: 14 }}>{error} — <Link to="/">Go home</Link></div>;
+  if (!pol)    return null;
+
+  const ini = `${pol.first_name?.[0] || ''}${pol.last_name?.[0] || ''}`;
+  const dw  = pol.dw_nominate;
+  const dwPct = dw != null ? ((dw + 1) / 2 * 100).toFixed(1) : null;
+  const dwColor = dw < -.1 ? 'var(--blue)' : dw > .1 ? 'var(--red)' : 'var(--amber)';
+
+  // Alignment score color
+  const scoreColor = alignment?.score >= 70 ? 'var(--green)' : alignment?.score >= 45 ? 'var(--amber)' : 'var(--red)';
 
   return (
     <main style={{ maxWidth: 740, margin: '0 auto', padding: '2.5rem 1.5rem 5rem' }}>
