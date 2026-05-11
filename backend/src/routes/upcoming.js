@@ -1,12 +1,35 @@
 // src/routes/upcoming.js
-// GET /api/upcoming?userId=X
-// Returns upcoming elections (politicians with next_election matching current/next year)
-// and recently active bills in the user's priority issue areas.
-
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { calculateAlignment } = require('../services/alignmentEngine');
+
+// Parse Congress.gov bill type + number from short_title or id
+function parseBillRef(short_title, id, congress) {
+  if (short_title) {
+    const st = short_title.trim();
+    const patterns = [
+      [/^H\.\s*J\.\s*Res\.?\s*(\d+)$/i,   'hjres'],
+      [/^S\.\s*J\.\s*Res\.?\s*(\d+)$/i,   'sjres'],
+      [/^H\.\s*Con\.\s*Res\.?\s*(\d+)$/i, 'hconres'],
+      [/^S\.\s*Con\.\s*Res\.?\s*(\d+)$/i, 'sconres'],
+      [/^H\.\s*Res\.?\s*(\d+)$/i,         'hres'],
+      [/^S\.\s*Res\.?\s*(\d+)$/i,         'sres'],
+      [/^H\.R\.?\s*(\d+)$/i,              'hr'],
+      [/^S\.\s+(\d+)$/i,                  's'],
+      [/^S\.(\d+)$/i,                     's'],
+    ];
+    for (const [re, type] of patterns) {
+      const m = st.match(re);
+      if (m) return { type, number: m[1], congress: congress || 119 };
+    }
+  }
+  if (id) {
+    const m = id.match(/^([a-z]+)(\d+)-(\d+)$/);
+    if (m) return { type: m[1], number: m[2], congress: parseInt(m[3]) };
+  }
+  return null;
+}
 
 // Maps user survey issue keys → ProPublica primary_subject values stored in bills table
 const PRIORITY_TO_SUBJECTS = {
@@ -94,7 +117,7 @@ router.get('/', async (req, res) => {
       const billsResult = await db.query(`
         SELECT * FROM (
           SELECT DISTINCT ON (title) id, bill_id, number, title, short_title,
-                 primary_subject, categories, introduced_date, last_vote_date, status, congress
+                 summary, primary_subject, categories, introduced_date, last_vote_date, status, congress, sponsor_id
           FROM bills
           WHERE primary_subject = ANY($1) AND ${NO_NOMINATIONS}
           ORDER BY title, id DESC
@@ -107,7 +130,7 @@ router.get('/', async (req, res) => {
       const billsResult = await db.query(`
         SELECT * FROM (
           SELECT DISTINCT ON (title) id, bill_id, number, title, short_title,
-                 primary_subject, categories, introduced_date, last_vote_date, status, congress
+                 summary, primary_subject, categories, introduced_date, last_vote_date, status, congress, sponsor_id
           FROM bills
           WHERE ${NO_NOMINATIONS}
           ORDER BY title, id DESC
@@ -118,10 +141,16 @@ router.get('/', async (req, res) => {
       bills = billsResult.rows;
     }
 
+    // Attach billRef so frontend can build Congress.gov URLs and call /api/bills/details
+    const billsWithRef = bills.map(b => ({
+      ...b,
+      billRef: parseBillRef(b.short_title, b.id, b.congress),
+    }));
+
     res.json({
       electionYear: electionYears[0],
       elections: politicians,
-      bills,
+      bills: billsWithRef,
       userPriorities,
     });
   } catch (err) {

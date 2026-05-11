@@ -120,6 +120,30 @@ export async function getPresident(polIds = []) {
   return data;
 }
 
+// ── Bills ─────────────────────────────────────────────────────────────────────
+
+export async function getBillDetails(congress, type, number, polIds = []) {
+  const params = { congress, type, number };
+  if (polIds.length) params.polIds = polIds.join(',');
+  const { data } = await api.get('/bills/details', { params });
+  return data;
+}
+
+export async function getTrackedBills() {
+  const { data } = await api.get('/bills/tracked', { headers: authHeader() });
+  return data;
+}
+
+export async function trackBill(congress, type, number, title) {
+  const { data } = await api.post('/bills/track', { congress, type, number, title }, { headers: authHeader() });
+  return data;
+}
+
+export async function untrackBill(congress, type, number) {
+  const { data } = await api.delete('/bills/track', { data: { congress, type, number }, headers: authHeader() });
+  return data;
+}
+
 // ── Notification preferences ──────────────────────────────────────────────────
 
 function authHeader() {

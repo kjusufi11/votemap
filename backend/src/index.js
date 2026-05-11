@@ -12,6 +12,7 @@ const adminRoutes         = require('./routes/admin');
 const upcomingRoutes      = require('./routes/upcoming');
 const notificationsRoutes = require('./routes/notifications');
 const presidentRoutes     = require('./routes/president');
+const billsRoutes         = require('./routes/bills');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -63,6 +64,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/upcoming', upcomingRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/president', presidentRoutes);
+app.use('/api/bills', billsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

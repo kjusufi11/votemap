@@ -152,8 +152,20 @@ const migrations = [
   `CREATE INDEX IF NOT EXISTS notif_sent_user_idx ON email_notifications_sent(user_id)`,
 
   // ── Schema patches ────────────────────────────────────────────────────────
-  // Add flag column to bias_scores (for corruption/foreign influence tagging)
   `ALTER TABLE bias_scores ADD COLUMN IF NOT EXISTS flag TEXT`,
+
+  // ── Tracked bills ──────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS tracked_bills (
+    id          SERIAL PRIMARY KEY,
+    user_id     TEXT NOT NULL,
+    congress    INTEGER NOT NULL,
+    bill_type   TEXT NOT NULL,
+    bill_number TEXT NOT NULL,
+    title       TEXT,
+    tracked_at  TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, congress, bill_type, bill_number)
+  )`,
+  `CREATE INDEX IF NOT EXISTS tracked_bills_user_idx ON tracked_bills(user_id)`,
 ];
 
 function getMigrations() {

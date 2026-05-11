@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { getUpcoming } from '../services/api';
+import { getUpcoming, getBillDetails, getTrackedBills, trackBill, untrackBill } from '../services/api';
 import Avatar from '../components/Avatar';
 
 const PC = { D: 'var(--party-d)', R: 'var(--party-r)', I: 'var(--party-i)' };
@@ -25,14 +25,42 @@ const BILL_TYPE_MAP = {
   hconres: 'house-concurrent-resolution', sconres: 'senate-concurrent-resolution',
 };
 
-function buildCongressUrl(bill) {
-  if (!bill?.id || !bill?.congress) return null;
-  const match = bill.id.match(/^([a-z]+)(\d+)-(\d+)$/);
-  if (!match) return null;
-  const [, type, num, congress] = match;
-  const billType = BILL_TYPE_MAP[type];
+const STATUS_COLOR = {
+  'Signed':            'var(--green)',
+  'Vetoed':            'var(--red)',
+  'Passed House':      'var(--amber)',
+  'Passed Senate':     'var(--amber)',
+  'Out of Committee':  'var(--amber)',
+  'In Committee':      'var(--text-3)',
+  'Introduced':        'var(--text-3)',
+};
+const STATUS_BG = {
+  'Signed':            'var(--green-dim)',
+  'Vetoed':            'var(--red-dim)',
+  'Passed House':      'var(--amber-dim)',
+  'Passed Senate':     'var(--amber-dim)',
+  'Out of Committee':  'var(--amber-dim)',
+  'In Committee':      'var(--bg-3)',
+  'Introduced':        'var(--bg-3)',
+};
+
+function buildCongressUrl(ref) {
+  if (!ref) return null;
+  const { congress, type, number } = ref;
+  const billType = BILL_TYPE_MAP[type?.toLowerCase()];
   if (!billType) return null;
-  return `https://www.congress.gov/bill/${congress}th-congress/${billType}/${num}`;
+  return `https://www.congress.gov/bill/${congress}th-congress/${billType}/${number}`;
+}
+
+function getRepPolIds() {
+  try {
+    const stored = sessionStorage.getItem('votemap_lookup');
+    if (!stored) return [];
+    const parsed = JSON.parse(stored);
+    return (parsed.representatives || [])
+      .filter(r => r.level === 'federal' && r.id)
+      .map(r => r.id);
+  } catch { return []; }
 }
 
 function SectionLabel({ children }) {
@@ -102,6 +130,9 @@ export default function UpcomingPage() {
   const [stateFilter, setStateFilter] = useState('');
   const [userState, setUserState]     = useState('');
   const [showAllStates, setShowAllStates] = useState(false);
+  const [expandedBills, setExpandedBills] = useState(new Set());
+  const [trackedKeys, setTrackedKeys]     = useState(new Set());
+  const [repPolIds, setRepPolIds]         = useState([]);
 
   useEffect(() => {
     try {
@@ -110,6 +141,7 @@ export default function UpcomingPage() {
         const parsed = JSON.parse(stored);
         if (parsed.state) setUserState(parsed.state.toUpperCase());
       }
+      setRepPolIds(getRepPolIds());
     } catch {}
   }, []);
 
@@ -120,6 +152,29 @@ export default function UpcomingPage() {
       .catch(err => setError(err?.response?.data?.error || err.message || 'Failed to load.'))
       .finally(() => setLoading(false));
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    getTrackedBills()
+      .then(rows => setTrackedKeys(new Set(rows.map(r => `${r.congress}:${r.bill_type}:${r.bill_number}`))))
+      .catch(() => {});
+  }, [isLoggedIn]);
+
+  const toggleBill = useCallback(id => {
+    setExpandedBills(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleTrackChange = useCallback((key, tracked) => {
+    setTrackedKeys(prev => {
+      const next = new Set(prev);
+      tracked ? next.add(key) : next.delete(key);
+      return next;
+    });
+  }, []);
 
   if (loading) return (
     <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--text-3)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
@@ -277,7 +332,20 @@ export default function UpcomingPage() {
           </p>
         ) : (
           <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: 'var(--shadow)' }}>
-            {bills.map((bill, i) => <BillRow key={bill.id} bill={bill} last={i === bills.length - 1} />)}
+            {bills.map((bill, i) => (
+              <BillCard
+                key={bill.id}
+                bill={bill}
+                last={i === bills.length - 1}
+                expanded={expandedBills.has(bill.id)}
+                onToggle={() => toggleBill(bill.id)}
+                trackedKeys={trackedKeys}
+                onTrackChange={handleTrackChange}
+                user={user}
+                isLoggedIn={isLoggedIn}
+                repPolIds={repPolIds}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -332,49 +400,192 @@ function ElectionCard({ pol }) {
   );
 }
 
-function BillRow({ bill, last }) {
+function BillCard({ bill, last, expanded, onToggle, trackedKeys, onTrackChange, user, isLoggedIn, repPolIds }) {
+  const [details, setDetails]           = useState(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [trackPending, setTrackPending] = useState(false);
+
+  const ref      = bill.billRef;
+  const trackKey = ref ? `${ref.congress}:${ref.type}:${ref.number}` : null;
+  const isTracked = trackKey ? trackedKeys.has(trackKey) : false;
+  const congressUrl = buildCongressUrl(ref);
+
   const date    = bill.last_vote_date || bill.introduced_date;
   const dateStr = date ? new Date(date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : null;
-  const url     = buildCongressUrl(bill);
+
+  useEffect(() => {
+    if (!expanded || details !== null || !ref) return;
+    setLoadingDetails(true);
+    getBillDetails(ref.congress, ref.type, ref.number, repPolIds)
+      .then(setDetails)
+      .catch(() => setDetails({}))
+      .finally(() => setLoadingDetails(false));
+  }, [expanded, ref, details, repPolIds]);
+
+  const handleTrack = async e => {
+    e.stopPropagation();
+    if (!ref || trackPending) return;
+    setTrackPending(true);
+    try {
+      if (isTracked) {
+        await untrackBill(ref.congress, ref.type, ref.number);
+        onTrackChange(trackKey, false);
+      } else {
+        await trackBill(ref.congress, ref.type, ref.number, bill.short_title || bill.title);
+        onTrackChange(trackKey, true);
+      }
+    } catch {} finally { setTrackPending(false); }
+  };
+
+  const statusLabel = details?.statusLabel || null;
 
   return (
-    <div style={{
-      padding: '12px 1.25rem', borderBottom: last ? 'none' : '1px solid var(--border)',
-      display: 'flex', gap: '.875rem', alignItems: 'flex-start',
-    }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.45, marginBottom: 5 }}>
-          {bill.short_title || bill.title}
-        </p>
-        <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          {bill.primary_subject && (
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', padding: '1px 6px', borderRadius: 3, background: 'var(--bg-3)' }}>
-              {bill.primary_subject}
-            </span>
-          )}
-          {bill.number && (
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>{bill.number}</span>
-          )}
-          {bill.status && (
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>{bill.status}</span>
-          )}
-          {url && (
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={e => e.stopPropagation()}
-              style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textDecoration: 'none', whiteSpace: 'nowrap' }}
-              onMouseEnter={e => e.currentTarget.style.color = 'var(--text)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-2)'}
-            >
-              Read more →
-            </a>
+    <div style={{ borderBottom: last ? 'none' : '1px solid var(--border)' }}>
+      {/* ── Collapsed header (always visible) ── */}
+      <button
+        onClick={onToggle}
+        style={{
+          width: '100%', padding: '12px 1.25rem',
+          display: 'flex', gap: '.875rem', alignItems: 'flex-start',
+          background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.45, marginBottom: 5 }}>
+            {bill.short_title || bill.title}
+          </p>
+          <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            {bill.primary_subject && (
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', padding: '1px 6px', borderRadius: 3, background: 'var(--bg-3)' }}>
+                {bill.primary_subject}
+              </span>
+            )}
+            {ref && (
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>
+                {ref.type.toUpperCase().replace('HJRES', 'H.J.Res.').replace('SJRES', 'S.J.Res.').replace('HCONRES', 'H.Con.Res.').replace('SCONRES', 'S.Con.Res.').replace('HRES', 'H.Res.').replace('SRES', 'S.Res.').replace('HR', 'H.R.')}{' '}{ref.number}
+              </span>
+            )}
+            {statusLabel && (
+              <span style={{
+                fontSize: 10, fontFamily: 'var(--font-mono)', padding: '1px 6px', borderRadius: 3,
+                background: STATUS_BG[statusLabel] || 'var(--bg-3)',
+                color: STATUS_COLOR[statusLabel] || 'var(--text-3)',
+              }}>{statusLabel}</span>
+            )}
+            {isTracked && (
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--green)' }}>Tracking</span>
+            )}
+            {dateStr && (
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', marginLeft: 'auto', whiteSpace: 'nowrap' }}>{dateStr}</span>
+            )}
+          </div>
+        </div>
+        <span style={{ fontSize: 12, color: 'var(--text-3)', flexShrink: 0, marginTop: 2, fontFamily: 'var(--font-mono)' }}>
+          {expanded ? '↑' : '↓'}
+        </span>
+      </button>
+
+      {/* ── Expanded details ── */}
+      {expanded && (
+        <div style={{ padding: '0 1.25rem 1rem', borderTop: '1px solid var(--border)' }}>
+          {loadingDetails ? (
+            <p style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', padding: '10px 0' }}>
+              Loading details…
+            </p>
+          ) : (
+            <>
+              {/* Summary */}
+              {(details?.summary || bill.summary) && (
+                <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: '.75rem', paddingTop: '.75rem' }}>
+                  {details?.summary || bill.summary}
+                </p>
+              )}
+
+              {/* Status + committee */}
+              <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '.75rem', paddingTop: details?.summary || bill.summary ? 0 : '.75rem' }}>
+                {details?.primaryCommittee && (
+                  <div>
+                    <p style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 3 }}>Committee</p>
+                    <p style={{ fontSize: 12, color: 'var(--text-2)' }}>{details.primaryCommittee}</p>
+                  </div>
+                )}
+                {details?.latestAction && (
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <p style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 3 }}>Latest action</p>
+                    <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.4 }}>
+                      {details.latestAction.text}
+                      {details.latestAction.actionDate && (
+                        <span style={{ color: 'var(--text-3)', marginLeft: '.5rem' }}>
+                          · {new Date(details.latestAction.actionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Rep cosponsors */}
+              {details?.repCosponsors?.length > 0 && (
+                <div style={{ marginBottom: '.75rem' }}>
+                  <p style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 3 }}>Your reps who co-sponsored</p>
+                  <div style={{ display: 'flex', gap: '.375rem', flexWrap: 'wrap' }}>
+                    {details.repCosponsors.map(c => (
+                      <span key={c.bioguideId} style={{
+                        fontSize: 11, fontFamily: 'var(--font-mono)',
+                        padding: '2px 8px', borderRadius: 3,
+                        background: 'var(--bg-3)', color: 'var(--text-2)',
+                      }}>{c.fullName} ({c.state})</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '.5rem' }}>
+                {congressUrl && (
+                  <a
+                    href={congressUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                      fontSize: 11, fontFamily: 'var(--font-mono)',
+                      padding: '5px 12px', borderRadius: 'var(--radius)',
+                      border: '1px solid var(--border-med)',
+                      color: 'var(--text-2)', textDecoration: 'none', background: 'var(--bg-2)',
+                    }}
+                  >Read full text →</a>
+                )}
+                {isLoggedIn && ref && (
+                  <button
+                    onClick={handleTrack}
+                    disabled={trackPending}
+                    style={{
+                      fontSize: 11, fontFamily: 'var(--font-mono)',
+                      padding: '5px 12px', borderRadius: 'var(--radius)',
+                      border: '1px solid var(--border-med)',
+                      background: isTracked ? 'var(--green-dim)' : 'var(--bg-2)',
+                      color: isTracked ? 'var(--green)' : 'var(--text-2)',
+                      cursor: trackPending ? 'default' : 'pointer',
+                      opacity: trackPending ? 0.6 : 1,
+                    }}
+                  >{isTracked ? 'Tracking ✓' : 'Track this bill'}</button>
+                )}
+                {!isLoggedIn && ref && (
+                  <Link
+                    to="/?signin=1"
+                    style={{
+                      fontSize: 11, fontFamily: 'var(--font-mono)',
+                      padding: '5px 12px', borderRadius: 'var(--radius)',
+                      border: '1px solid var(--border-med)',
+                      color: 'var(--text-3)', textDecoration: 'none', background: 'var(--bg-2)',
+                    }}
+                  >Sign in to track</Link>
+                )}
+              </div>
+            </>
           )}
         </div>
-      </div>
-      {dateStr && (
-        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)', flexShrink: 0, whiteSpace: 'nowrap' }}>{dateStr}</span>
       )}
     </div>
   );
