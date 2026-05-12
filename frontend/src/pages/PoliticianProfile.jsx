@@ -101,7 +101,7 @@ export default function PoliticianProfile() {
   const [posFilter, setPosFilter] = useState('');
   const [subFilter, setSubFilter] = useState('');
   const [votePage,  setVotePage]  = useState(0);
-  const VOTES_PER_PAGE = 15;
+  const VOTES_PER_PAGE = 50;
 
   useEffect(() => { loadAll(); }, [id]);
 
@@ -214,11 +214,6 @@ export default function PoliticianProfile() {
 
   function handleShowVotes() {
     setVotesExpanded(true);
-    if (!initialFilterSet.current && userSurvey?.importance) {
-      const topSubject = getTopIssueSubject(userSurvey.importance);
-      if (topSubject) { setSubFilter(topSubject); setVotePage(0); }
-      initialFilterSet.current = true;
-    }
   }
 
   // Filtered votes
