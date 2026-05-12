@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { calculateAlignment } = require('../services/alignmentEngine');
+const { getRecentBills } = require('../services/congress');
 
 // Parse Congress.gov bill type + number from short_title or id
 function parseBillRef(short_title, id, congress) {
@@ -31,18 +32,41 @@ function parseBillRef(short_title, id, congress) {
   return null;
 }
 
-// Maps user survey issue keys → ProPublica primary_subject values stored in bills table
-const PRIORITY_TO_SUBJECTS = {
-  healthcare:          ['Health', 'Medicare', 'Medicaid', 'Opioid Abuse'],
-  climate:             ['Environmental Protection', 'Energy', 'Public Lands and Natural Resources', 'Water Resources Development'],
-  immigration:         ['Immigration', 'Border Security'],
-  gun_policy:          ['Crime and Law Enforcement', 'Firearms'],
-  taxes:               ['Taxation', 'Economics and Public Finance'],
-  defense:             ['Armed Forces and National Security', 'International Affairs', 'Emergency Management'],
-  reproductive_rights: ['Civil Rights and Liberties, Minority Issues', 'Health'],
-  education:           ['Education', 'Education Sciences and Education'],
-  safety_net:          ['Social Welfare', 'Housing and Community Development', 'Labor and Employment'],
-  criminal_justice:    ['Crime and Law Enforcement', 'Law', 'Civil Rights and Liberties, Minority Issues'],
+// Congress.gov policyArea.name → user survey priority keys
+const POLICY_AREA_TO_PRIORITY = {
+  'Health':                                        ['healthcare'],
+  'Medicare':                                      ['healthcare'],
+  'Medicaid':                                      ['healthcare'],
+  'Opioid Abuse and Addiction':                    ['healthcare'],
+  'Environmental Protection':                      ['climate'],
+  'Energy':                                        ['climate'],
+  'Public Lands and Natural Resources':            ['climate'],
+  'Water Resources Development':                   ['climate'],
+  'Immigration':                                   ['immigration'],
+  'Border Security':                               ['immigration'],
+  'Firearms':                                      ['gun_policy'],
+  'Crime and Law Enforcement':                     ['criminal_justice', 'gun_policy'],
+  'Taxation':                                      ['taxes'],
+  'Economics and Public Finance':                  ['taxes'],
+  'Commerce':                                      ['taxes'],
+  'Finance and Financial Sector':                  ['taxes'],
+  'Armed Forces and National Security':            ['defense'],
+  'International Affairs':                         ['defense'],
+  'Emergency Management':                          ['defense'],
+  'Education':                                     ['education'],
+  'Sports and Recreation':                         ['education'],
+  'Social Welfare':                                ['safety_net'],
+  'Housing and Community Development':             ['safety_net'],
+  'Labor and Employment':                          ['safety_net'],
+  'Families':                                      ['safety_net'],
+  'Law':                                           ['criminal_justice'],
+  'Civil Rights and Liberties, Minority Issues':   ['criminal_justice', 'reproductive_rights'],
+  'Reproductive Rights':                           ['reproductive_rights'],
+  'Women':                                         ['reproductive_rights'],
+  'Elections':                                     ['voting_rights'],
+  'Congress':                                      ['voting_rights'],
+  'Transportation and Public Works':               ['infrastructure'],
+  'Science, Technology, Communications':           ['infrastructure'],
 };
 
 router.get('/', async (req, res) => {
@@ -88,8 +112,7 @@ router.get('/', async (req, res) => {
       }));
     }
 
-    // ── Bills to watch (user priorities) ─────────────────────────────────────
-    let bills = [];
+    // ── Bills to watch — fetch active/upcoming bills from Congress.gov ──────────
     let userPriorities = [];
 
     if (userId) {
@@ -104,48 +127,46 @@ router.get('/', async (req, res) => {
       }
     }
 
-    const subjectSet = new Set();
-    for (const priority of userPriorities) {
-      for (const s of (PRIORITY_TO_SUBJECTS[priority] || [])) subjectSet.add(s);
+    // Fetch bills updated in the last 90 days from Congress.gov
+    let cgBills = [];
+    try {
+      cgBills = await getRecentBills(119, 90);
+    } catch (err) {
+      console.warn('[upcoming] Congress.gov bills fetch failed:', err.message);
     }
 
-    // Nomination/confirmation votes have ", to be " in the title — exclude them.
-    const NO_NOMINATIONS = `title NOT LIKE '%, to be %'`;
+    // Exclude already-enacted or vetoed bills — those belong on the President page
+    const DONE_PATTERN = /signed by the president|became public law|vetoed by the president/i;
+    let activeBills = cgBills.filter(b => !DONE_PATTERN.test(b.latestAction?.text || ''));
 
-    if (subjectSet.size > 0) {
-      const subjects = Array.from(subjectSet);
-      const billsResult = await db.query(`
-        SELECT * FROM (
-          SELECT DISTINCT ON (title) id, bill_id, number, title, short_title,
-                 summary, primary_subject, categories, introduced_date, last_vote_date, status, congress, sponsor_id
-          FROM bills
-          WHERE primary_subject = ANY($1) AND ${NO_NOMINATIONS}
-          ORDER BY title, id DESC
-        ) sub
-        ORDER BY id DESC
-        LIMIT 30
-      `, [subjects]);
-      bills = billsResult.rows;
-    } else {
-      const billsResult = await db.query(`
-        SELECT * FROM (
-          SELECT DISTINCT ON (title) id, bill_id, number, title, short_title,
-                 summary, primary_subject, categories, introduced_date, last_vote_date, status, congress, sponsor_id
-          FROM bills
-          WHERE ${NO_NOMINATIONS}
-          ORDER BY title, id DESC
-        ) sub
-        ORDER BY id DESC
-        LIMIT 30
-      `);
-      bills = billsResult.rows;
+    // Filter to user's priority policy areas when logged in
+    if (userPriorities.length > 0) {
+      const userPrioritySet = new Set(userPriorities);
+      activeBills = activeBills.filter(b => {
+        const area = b.policyArea?.name || '';
+        const domains = POLICY_AREA_TO_PRIORITY[area] || [];
+        return domains.some(d => userPrioritySet.has(d));
+      });
     }
 
-    // Attach billRef so frontend can build Congress.gov URLs and call /api/bills/details
-    const billsWithRef = bills.map(b => ({
-      ...b,
-      billRef: parseBillRef(b.short_title, b.id, b.congress),
-    }));
+    // Shape into the format the frontend expects, with billRef pre-attached
+    const billsWithRef = activeBills.slice(0, 40).map(b => {
+      const type   = (b.type || '').toLowerCase();
+      const number = String(b.number || '');
+      const congress = b.congress || 119;
+      return {
+        id:               `${type}${number}-${congress}`,
+        title:            b.title || '',
+        short_title:      `${b.type || ''}. ${number}`,
+        summary:          null,
+        primary_subject:  b.policyArea?.name || null,
+        introduced_date:  b.introducedDate || null,
+        last_vote_date:   null,
+        status:           b.latestAction?.text?.slice(0, 120) || null,
+        congress,
+        billRef:          type && number ? { type, number, congress } : null,
+      };
+    });
 
     res.json({
       electionYear: electionYears[0],
