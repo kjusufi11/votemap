@@ -80,7 +80,7 @@ export default function PrivacyPage() {
         <Section title="How we use your data">
           <P>We use your data to:</P>
           <UL items={[
-            'Calculate alignment scores between your positions and your representatives' voting records',
+            "Calculate alignment scores between your positions and your representatives' voting records",
             'Send vote alert emails when your representatives vote on issues you marked as important (only if you opt in)',
             'Improve the accuracy of match scores over time',
             'Produce aggregate, anonymized civic research statistics (only if you explicitly consent in the extended survey)',
