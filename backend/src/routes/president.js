@@ -326,12 +326,47 @@ async function getRepVotes(polIds) {
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 
-// GET /api/president/eos — full EO list with AI summaries, loaded lazily by frontend
-router.get('/eos', async (req, res) => {
+// GET /api/president/eos/counts — domain category counts, no summaries, fast from cache
+router.get('/eos/counts', async (req, res) => {
   try {
     const eoData = await fetchExecutiveOrders();
-    const ordersWithSummaries = await addSummaries(eoData.orders);
-    res.json({ total: eoData.total, orders: ordersWithSummaries });
+    const counts = {};
+    for (const eo of eoData.orders) {
+      for (const d of (eo.domains || [])) {
+        counts[d] = (counts[d] || 0) + 1;
+      }
+    }
+    res.json({ total: eoData.total, counts });
+  } catch (err) {
+    console.error('[president/eos/counts]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/president/eos — paginated, filtered EO list with AI summaries
+// Params: domain (category key), q (search), offset (default 0), limit (default 20, max 50)
+router.get('/eos', async (req, res) => {
+  const domain = req.query.domain || null;
+  const q      = (req.query.q || '').trim().toLowerCase();
+  const limit  = Math.min(parseInt(req.query.limit) || 20, 50);
+  const offset = parseInt(req.query.offset) || 0;
+
+  try {
+    const eoData = await fetchExecutiveOrders();
+    let orders = eoData.orders;
+
+    if (domain) orders = orders.filter(eo => (eo.domains || []).includes(domain));
+    if (q) orders = orders.filter(eo =>
+      eo.title?.toLowerCase().includes(q) ||
+      eo.abstract?.toLowerCase().includes(q)
+    );
+
+    const total   = orders.length;
+    const paged   = orders.slice(offset, offset + limit);
+    const hasMore = offset + limit < total;
+
+    const withSummaries = await addSummaries(paged);
+    res.json({ total, orders: withSummaries, hasMore, offset, limit });
   } catch (err) {
     console.error('[president/eos]', err.message);
     res.status(500).json({ error: err.message });

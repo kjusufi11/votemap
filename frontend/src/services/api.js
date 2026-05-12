@@ -120,8 +120,16 @@ export async function getPresident(polIds = []) {
   return data;
 }
 
-export async function getPresidentEOs() {
-  const { data } = await api.get('/president/eos', { timeout: 90000 });
+export async function getPresidentEOCounts() {
+  const { data } = await api.get('/president/eos/counts');
+  return data;
+}
+
+export async function getPresidentEOs({ domain, q, offset = 0, limit = 20 } = {}) {
+  const params = { offset, limit };
+  if (domain) params.domain = domain;
+  if (q) params.q = q;
+  const { data } = await api.get('/president/eos', { params, timeout: 60000 });
   return data;
 }
 

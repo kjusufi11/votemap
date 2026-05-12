@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getPresident, getSurvey, getPresidentEOs } from '../services/api';
+import { getPresident, getSurvey, getPresidentEOs, getPresidentEOCounts } from '../services/api';
 
 const PARTY_COLOR = { D: 'var(--party-d)', R: 'var(--party-r)', I: 'var(--party-i)' };
 const PARTY_DIM   = { D: 'var(--party-d-dim)', R: 'var(--party-r-dim)', I: 'var(--party-i-dim)' };
@@ -381,10 +381,15 @@ export default function PresidentPage() {
   const [search, setSearch]       = useState('');
   const [activeFilter, setActiveFilter] = useState(null);
   const [viewMode, setViewMode]   = useState('cards'); // 'cards' | 'timeline'
-  const [showEOs, setShowEOs]     = useState(false);
-  // null = not fetched, 'loading' = in-flight, array = done
-  const [eos, setEos]             = useState(null);
+  const [eoCounts, setEoCounts]       = useState(null);
+  const [eos, setEos]                 = useState([]);
+  const [eoTotal, setEoTotal]         = useState(0);
+  const [eoOffset, setEoOffset]       = useState(0);
+  const [eoHasMore, setEoHasMore]     = useState(false);
+  const [eoLoading, setEoLoading]     = useState(false);
+  const [eoLoadingMore, setEoLoadingMore] = useState(false);
   const [userPriorities, setUserPriorities] = useState(null);
+  const EO_PAGE_SIZE = 20;
 
   useEffect(() => {
     const polIds = getRepPolIds();
@@ -409,57 +414,63 @@ export default function PresidentPage() {
     }).catch(() => {});
   }, [user]);
 
-  // Auto-reveal EO section when filters/search/timeline are activated
+  // Load category counts immediately for filter pills (no summaries, fast)
   useEffect(() => {
-    if (activeFilter || search.trim() || viewMode === 'timeline') setShowEOs(true);
-  }, [activeFilter, search, viewMode]);
+    getPresidentEOCounts()
+      .then(d => setEoCounts(d))
+      .catch(() => setEoCounts({ total: 0, counts: {} }));
+  }, []);
 
-  // Fetch EOs when section is revealed for the first time
+  // Fetch filtered EOs when category or search changes; debounce search by 350ms
   useEffect(() => {
-    if (!showEOs || eos !== null) return;
-    setEos('loading');
-    getPresidentEOs()
-      .then(d => setEos(d.orders || []))
-      .catch(() => setEos([]));
-  }, [showEOs, eos]);
+    if (!activeFilter && !search.trim()) {
+      setEos([]); setEoTotal(0); setEoHasMore(false); setEoOffset(0);
+      return;
+    }
+    const delay = activeFilter ? 0 : 350;
+    const timer = setTimeout(() => {
+      setEoLoading(true);
+      setEos([]); setEoOffset(0);
+      getPresidentEOs({ domain: activeFilter || undefined, q: search.trim() || undefined, offset: 0, limit: EO_PAGE_SIZE })
+        .then(d => {
+          setEos(d.orders || []);
+          setEoTotal(d.total || 0);
+          setEoHasMore(d.hasMore || false);
+          setEoOffset(EO_PAGE_SIZE);
+        })
+        .catch(() => {})
+        .finally(() => setEoLoading(false));
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [activeFilter, search]);
 
   const { president, stats, enactedBills = [], vetoedBills = [], nominations = [], repVotes = [] } = data || {};
 
-  const eosArray = Array.isArray(eos) ? eos : [];
-
-  // Domain counts for filter pills — only available once EOs are loaded
-  const domainCounts = useMemo(() => {
-    const counts = {};
-    for (const eo of eosArray) {
-      for (const d of (eo.domains || [])) {
-        counts[d] = (counts[d] || 0) + 1;
-      }
-    }
-    return counts;
-  }, [eosArray]);
-
+  // Category pills from backend counts — available immediately without loading all EOs
   const activeDomains = useMemo(() =>
-    Object.entries(domainCounts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([d]) => d),
-    [domainCounts]
+    eoCounts?.counts
+      ? Object.entries(eoCounts.counts).sort((a, b) => b[1] - a[1]).map(([d]) => d)
+      : [],
+    [eoCounts]
   );
 
-  const filteredOrders = useMemo(() => {
-    let orders = eosArray;
-    if (activeFilter) orders = orders.filter(eo => (eo.domains || []).includes(activeFilter));
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      orders = orders.filter(eo =>
-        eo.title?.toLowerCase().includes(q) ||
-        eo.summary?.toLowerCase().includes(q) ||
-        eo.abstract?.toLowerCase().includes(q)
-      );
-    }
-    return orders;
-  }, [eosArray, activeFilter, search]);
-
   const userPriorityDomains = userPriorities || new Set();
+
+  async function loadMoreEOs() {
+    setEoLoadingMore(true);
+    try {
+      const d = await getPresidentEOs({
+        domain: activeFilter || undefined,
+        q: search.trim() || undefined,
+        offset: eoOffset,
+        limit: EO_PAGE_SIZE,
+      });
+      setEos(prev => [...prev, ...(d.orders || [])]);
+      setEoHasMore(d.hasMore || false);
+      setEoOffset(prev => prev + EO_PAGE_SIZE);
+    } catch {}
+    setEoLoadingMore(false);
+  }
 
   if (loading) return (
     <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--text-3)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
@@ -528,116 +539,95 @@ export default function PresidentPage() {
 
       {/* ── Executive orders ── */}
       <div style={{ marginBottom: '3rem' }}>
-        <SectionLabel>Executive orders ({stats?.eoCount ?? '…'} total)</SectionLabel>
+        <SectionLabel>Executive orders ({eoCounts?.total ?? stats?.eoCount ?? '…'} total)</SectionLabel>
 
-        {!showEOs ? (
-          <button
-            onClick={() => setShowEOs(true)}
+        {/* Search + view toggle — always visible */}
+        <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            placeholder="Search orders…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
             style={{
-              fontSize: 12, fontFamily: 'var(--font-mono)',
-              padding: '7px 16px', borderRadius: 'var(--radius)',
-              border: '1px solid var(--border-med)',
-              background: 'var(--bg-2)', color: 'var(--text-2)',
-              cursor: 'pointer',
+              flex: '1 1 200px', minWidth: 0, fontSize: 12, fontFamily: 'var(--font-mono)',
+              padding: '6px 10px', border: '1px solid var(--border-med)', borderRadius: 'var(--radius)',
+              background: 'var(--bg-2)', color: 'var(--text)', outline: 'none',
             }}
-          >
-            Show all {stats?.eoCount ?? '…'} executive orders ↓
-          </button>
-        ) : eos === 'loading' ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '.75rem' }}>
-            {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+          />
+          <div style={{ display: 'flex', border: '1px solid var(--border-med)', borderRadius: 'var(--radius)', overflow: 'hidden', flexShrink: 0 }}>
+            {['cards', 'timeline'].map(mode => (
+              <button key={mode} onClick={() => setViewMode(mode)} style={{
+                fontSize: 11, fontFamily: 'var(--font-mono)', padding: '5px 12px', border: 'none',
+                background: viewMode === mode ? 'var(--text)' : 'var(--bg-2)',
+                color: viewMode === mode ? 'var(--bg-2)' : 'var(--text-2)',
+                cursor: 'pointer',
+                borderRight: mode === 'cards' ? '1px solid var(--border-med)' : 'none',
+              }}>{mode}</button>
+            ))}
           </div>
+        </div>
+
+        {/* Category filter pills — from backend counts, visible without loading all EOs */}
+        {activeDomains.length > 0 && (
+          <div style={{ display: 'flex', gap: '.375rem', flexWrap: 'wrap', marginBottom: '.875rem' }}>
+            {activeDomains.map(d => (
+              <button key={d} onClick={() => setActiveFilter(activeFilter === d ? null : d)} style={{
+                fontSize: 11, fontFamily: 'var(--font-mono)', padding: '4px 10px', borderRadius: 20,
+                border: `1px solid ${activeFilter === d ? 'transparent' : 'var(--border-med)'}`,
+                background: activeFilter === d ? 'var(--text)' : 'var(--bg-2)',
+                color: activeFilter === d ? 'var(--bg-2)' : 'var(--text-2)',
+                cursor: 'pointer', transition: 'all var(--transition)',
+              }}>
+                {DOMAIN_LABELS[d] || d}{' '}
+                <span style={{ opacity: 0.55 }}>{eoCounts.counts[d]}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Body */}
+        {!activeFilter && !search.trim() ? (
+          <div style={{ padding: '2.5rem 0', textAlign: 'center' }}>
+            <p style={{ fontSize: 13, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
+              Select a category or search to browse executive orders
+            </p>
+          </div>
+        ) : eoLoading ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '.75rem' }}>
+            {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
+          </div>
+        ) : eos.length === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
+            No executive orders match.
+          </p>
         ) : (
           <>
-            {/* Search + view toggle */}
-            <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <input
-                type="text"
-                placeholder="Search orders…"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                style={{
-                  flex: '1 1 200px', minWidth: 0,
-                  fontSize: 12, fontFamily: 'var(--font-mono)',
-                  padding: '6px 10px',
-                  border: '1px solid var(--border-med)',
-                  borderRadius: 'var(--radius)',
-                  background: 'var(--bg-2)',
-                  color: 'var(--text)',
-                  outline: 'none',
-                }}
-              />
-              <div style={{ display: 'flex', border: '1px solid var(--border-med)', borderRadius: 'var(--radius)', overflow: 'hidden', flexShrink: 0 }}>
-                {['cards', 'timeline'].map(mode => (
-                  <button
-                    key={mode}
-                    onClick={() => setViewMode(mode)}
-                    style={{
-                      fontSize: 11, fontFamily: 'var(--font-mono)',
-                      padding: '5px 12px',
-                      border: 'none',
-                      background: viewMode === mode ? 'var(--text)' : 'var(--bg-2)',
-                      color: viewMode === mode ? 'var(--bg-2)' : 'var(--text-2)',
-                      cursor: 'pointer',
-                      borderRight: mode === 'cards' ? '1px solid var(--border-med)' : 'none',
-                    }}
-                  >{mode}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Domain filter pills */}
-            {activeDomains.length > 0 && (
-              <div style={{ display: 'flex', gap: '.375rem', flexWrap: 'wrap', marginBottom: '.875rem' }}>
-                <button
-                  onClick={() => setActiveFilter(null)}
-                  style={{
-                    fontSize: 11, fontFamily: 'var(--font-mono)',
-                    padding: '4px 10px', borderRadius: 20,
-                    border: '1px solid var(--border-med)',
-                    background: !activeFilter ? 'var(--text)' : 'var(--bg-2)',
-                    color: !activeFilter ? 'var(--bg-2)' : 'var(--text-2)',
-                    cursor: 'pointer',
-                  }}
-                >All</button>
-                {activeDomains.map(d => (
-                  <button
-                    key={d}
-                    onClick={() => setActiveFilter(activeFilter === d ? null : d)}
-                    style={{
-                      fontSize: 11, fontFamily: 'var(--font-mono)',
-                      padding: '4px 10px', borderRadius: 20,
-                      border: '1px solid var(--border-med)',
-                      background: activeFilter === d ? 'var(--text)' : 'var(--bg-2)',
-                      color: activeFilter === d ? 'var(--bg-2)' : 'var(--text-2)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {DOMAIN_LABELS[d] || d}{' '}
-                    <span style={{ opacity: 0.6 }}>{domainCounts[d]}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {filteredOrders.length === 0 ? (
-              <p style={{ fontSize: 13, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
-                No executive orders match.
-              </p>
-            ) : viewMode === 'timeline' ? (
+            <p style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginBottom: '.625rem' }}>
+              {eoTotal} order{eoTotal !== 1 ? 's' : ''}{activeFilter ? ` in ${DOMAIN_LABELS[activeFilter] || activeFilter}` : ''}
+            </p>
+            {viewMode === 'timeline' ? (
               <div style={{ paddingLeft: '.25rem' }}>
-                {filteredOrders.map((eo, i) => (
+                {eos.map((eo, i) => (
                   <EOCard key={eo.id} eo={eo} index={i} userPriorityDomains={userPriorityDomains} viewMode="timeline" />
                 ))}
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '.75rem' }}>
-                {filteredOrders.map((eo, i) => (
+                {eos.map((eo, i) => (
                   <EOCard key={eo.id} eo={eo} index={i} userPriorityDomains={userPriorityDomains} viewMode="cards" />
                 ))}
               </div>
             )}
-
+            {eoHasMore && (
+              <button onClick={loadMoreEOs} disabled={eoLoadingMore} style={{
+                marginTop: '1rem', fontSize: 12, fontFamily: 'var(--font-mono)',
+                padding: '8px 18px', border: '1px solid var(--border-med)', borderRadius: 'var(--radius)',
+                background: 'var(--bg-2)', color: eoLoadingMore ? 'var(--text-3)' : 'var(--text-2)',
+                cursor: eoLoadingMore ? 'default' : 'pointer', transition: 'all var(--transition)',
+              }}>
+                {eoLoadingMore ? 'Loading…' : `Load more (${eoTotal - eos.length} remaining)`}
+              </button>
+            )}
             <p style={{ marginTop: '1rem', fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
               Source: Federal Register (federalregister.gov) · Summaries generated by AI
             </p>
