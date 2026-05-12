@@ -11,7 +11,7 @@ const { classifyVote, effectivePosition } = require('./domainClassifier');
 
 const MIN_DONATION       = 500;
 const MIN_VOTES          = 2;
-const CONFLICT_THRESHOLD = 50;
+const CONFLICT_THRESHOLD = 35;
 const CACHE_DAYS         = 7;
 
 const SECTOR_MAP = [

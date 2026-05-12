@@ -64,25 +64,28 @@ export async function findCandidateId(fullName, state, chamber) {
   return null;
 }
 
-// Returns principal campaign committee_id or null
+// Returns principal campaign committee_id or null.
+// Tries principal committee first, then any authorized committee as fallback.
 export async function getCommitteeId(candidateId) {
-  try {
-    const data = await get(`/candidate/${candidateId}/committees/`, {
-      designation: 'P', per_page: 5,
-    });
-    return data.results?.[0]?.committee_id || null;
-  } catch { return null; }
+  for (const params of [{ designation: 'P', per_page: 5 }, { per_page: 10 }]) {
+    try {
+      const data = await get(`/candidate/${candidateId}/committees/`, params);
+      const id = data.results?.[0]?.committee_id;
+      if (id) return id;
+    } catch {}
+  }
+  return null;
 }
 
-// Returns [{employer, total}] aggregated across 2022 + 2024 cycles, sorted desc
+// Returns [{employer, total}] aggregated across 2022 + 2024 + 2026 cycles, sorted desc
 export async function getTopEmployers(committeeId) {
   const byEmployer = {};
-  for (const cycle of [2024, 2022]) {
+  for (const cycle of [2026, 2024, 2022]) {
     try {
       const data = await get('/schedules/schedule_a/by_employer/', {
         committee_id: committeeId,
         two_year_transaction_period: cycle,
-        sort: '-total', per_page: 25,
+        sort: '-total', per_page: 50,
       });
       for (const r of (data.results || [])) {
         const emp = r.employer?.trim().toUpperCase();
