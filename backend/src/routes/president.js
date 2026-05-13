@@ -449,7 +449,17 @@ router.get('/eos', async (req, res) => {
     const paged   = orders.slice(offset, offset + limit);
     const hasMore = offset + limit < total;
 
-    const withSummaries = await addSummaries(paged);
+    // Return immediately with whatever summaries are already cached.
+    // Fire background generation for anything not yet cached — don't await.
+    const withSummaries = paged.map(eo => ({
+      ...eo,
+      summary: cache.get(`eo_ai_${eo.id}`) !== undefined
+        ? (cache.get(`eo_ai_${eo.id}`) || null)
+        : null,
+    }));
+    const uncached = paged.filter(eo => cache.get(`eo_ai_${eo.id}`) === undefined);
+    if (uncached.length > 0) addSummaries(uncached).catch(() => {});
+
     res.json({ total, orders: withSummaries, hasMore, offset, limit });
   } catch (err) {
     console.error('[president/eos]', err.message);

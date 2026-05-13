@@ -180,11 +180,7 @@ export default function UpcomingPage() {
     });
   }, []);
 
-  if (loading) return (
-    <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--text-3)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
-      Loading upcoming…
-    </div>
-  );
+  if (loading) return <UpcomingSkeleton />;
 
   if (error) return (
     <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--red)', fontSize: 14 }}>{error}</div>
@@ -613,5 +609,67 @@ function BillCard({ bill, last, expanded, onToggle, trackedKeys, onTrackChange, 
         </div>
       )}
     </div>
+  );
+}
+
+function UpcomingSkeleton() {
+  const sh = (w, h, extra = {}) => ({
+    background: 'var(--bg-3)', borderRadius: 4,
+    animation: 'pulse 1.4s ease infinite',
+    width: w, height: h, ...extra,
+  });
+  return (
+    <main style={{ maxWidth: 820, margin: '0 auto', padding: '2.5rem 1.5rem 5rem' }}>
+      <div style={sh(280, 36, { marginBottom: '.5rem' })} />
+      <div style={sh(440, 16, { marginBottom: '2.5rem' })} />
+
+      <div style={{ marginBottom: '3rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '.75rem' }}>
+          <div style={sh(160, 10)} />
+          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '.75rem' }}>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} style={{
+              background: 'var(--bg-2)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-lg)', padding: '.875rem 1rem',
+            }}>
+              <div style={{ display: 'flex', gap: '.625rem', alignItems: 'center', marginBottom: '.5rem' }}>
+                <div style={sh(32, 32, { borderRadius: '50%', flexShrink: 0 })} />
+                <div style={{ flex: 1 }}>
+                  <div style={sh('75%', 13, { marginBottom: 4 })} />
+                  <div style={sh('55%', 11)} />
+                </div>
+              </div>
+              <div style={sh(68, 18, { borderRadius: 3 })} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '.75rem' }}>
+          <div style={sh(120, 10)} />
+          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+        </div>
+        <div style={{
+          background: 'var(--bg-2)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-lg)', overflow: 'hidden',
+        }}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} style={{
+              padding: '12px 1.25rem',
+              borderBottom: i < 5 ? '1px solid var(--border)' : 'none',
+            }}>
+              <div style={sh('80%', 13, { marginBottom: 6 })} />
+              <div style={{ display: 'flex', gap: '.4rem' }}>
+                <div style={sh(70, 16, { borderRadius: 3 })} />
+                <div style={sh(45, 16, { borderRadius: 3 })} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </main>
   );
 }

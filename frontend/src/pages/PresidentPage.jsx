@@ -232,16 +232,22 @@ export default function PresidentPage() {
   useEffect(() => {
     const polIds = getRepPolIds();
     setLoading(true);
+
+    // Load hero/stats first — unblocks the page as soon as president data arrives
+    getPresident(polIds)
+      .then(presData => setData(presData))
+      .catch(err => setError(err?.response?.data?.error || err.message || 'Failed to load.'))
+      .finally(() => setLoading(false));
+
+    // Load EO counts and initial EOs in parallel — EO section shows skeleton until done
     Promise.all([
-      getPresident(polIds),
       getPresidentEOCounts(),
       getPresidentEOs({ limit: 30 }),
-    ]).then(([presData, counts, eoData]) => {
-      setData(presData);
+    ]).then(([counts, eoData]) => {
       setEoCounts(counts);
       setInitialEOs(eoData.orders || []);
-    }).catch(err => setError(err?.response?.data?.error || err.message || 'Failed to load.'))
-      .finally(() => { setLoading(false); setEoInitLoading(false); });
+    }).catch(() => {})
+      .finally(() => setEoInitLoading(false));
   }, []);
 
   useEffect(() => {

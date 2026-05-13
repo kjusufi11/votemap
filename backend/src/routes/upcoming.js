@@ -1,9 +1,12 @@
 // src/routes/upcoming.js
 const express = require('express');
 const router = express.Router();
+const NodeCache = require('node-cache');
 const db = require('../db');
 const { calculateAlignment } = require('../services/alignmentEngine');
 const { getRecentBills } = require('../services/congress');
+
+const cache = new NodeCache({ stdTTL: 3600 });
 
 // Parse Congress.gov bill type + number from short_title or id
 function parseBillRef(short_title, id, congress) {
@@ -67,26 +70,33 @@ router.get('/', async (req, res) => {
     const currentYear = new Date().getFullYear();
     const electionYears = [String(currentYear), String(currentYear + 1)];
 
-    // Query senate and house separately so senate seats are never truncated by house volume
-    const [senateResult, houseResult] = await Promise.all([
-      db.query(`
-        SELECT id, full_name, first_name, last_name, party, state, chamber,
-               district, title, total_votes, party_loyalty_pct, next_election
-        FROM politicians
-        WHERE in_office = true AND chamber = 'senate' AND next_election = ANY($1)
-        ORDER BY state, last_name
-      `, [electionYears]),
-      db.query(`
-        SELECT id, full_name, first_name, last_name, party, state, chamber,
-               district, title, total_votes, party_loyalty_pct, next_election
-        FROM politicians
-        WHERE in_office = true AND chamber = 'house' AND next_election = ANY($1)
-        ORDER BY state, last_name
-        LIMIT 300
-      `, [electionYears]),
-    ]);
-
-    let politicians = [...senateResult.rows, ...houseResult.rows];
+    // Cache elections list — DB data rarely changes, 1-hour TTL
+    const electionsKey = `elections_${currentYear}`;
+    let politicians = cache.get(electionsKey);
+    if (!politicians) {
+      // Query senate and house separately so senate seats are never truncated by house volume
+      const [senateResult, houseResult] = await Promise.all([
+        db.query(`
+          SELECT id, full_name, first_name, last_name, party, state, chamber,
+                 district, title, total_votes, party_loyalty_pct, next_election
+          FROM politicians
+          WHERE in_office = true AND chamber = 'senate' AND next_election = ANY($1)
+          ORDER BY state, last_name
+        `, [electionYears]),
+        db.query(`
+          SELECT id, full_name, first_name, last_name, party, state, chamber,
+                 district, title, total_votes, party_loyalty_pct, next_election
+          FROM politicians
+          WHERE in_office = true AND chamber = 'house' AND next_election = ANY($1)
+          ORDER BY state, last_name
+          LIMIT 300
+        `, [electionYears]),
+      ]);
+      politicians = [...senateResult.rows, ...houseResult.rows];
+      cache.set(electionsKey, politicians, 3600);
+    } else {
+      politicians = politicians.map(p => ({ ...p })); // clone before mutating with alignment scores
+    }
 
     // ── Alignment scores for election politicians (if user logged in) ─────────
     if (userId && politicians.length > 0) {
@@ -117,47 +127,51 @@ router.get('/', async (req, res) => {
       }
     }
 
-    // Fetch bills updated in the last 90 days from Congress.gov
-    let cgBills = [];
-    try {
-      cgBills = await getRecentBills(119, 90);
-    } catch (err) {
-      console.warn('[upcoming] Congress.gov bills fetch failed:', err.message);
+    // Cache the shaped bills list — getRecentBills is itself cached by congress.js but
+    // the filter + shape loop runs every request. Cache the output for 1 hour.
+    const billsKey = 'bills_active_119';
+    let allBillsWithRef = cache.get(billsKey);
+    if (!allBillsWithRef) {
+      let cgBills = [];
+      try {
+        cgBills = await getRecentBills(119, 90);
+      } catch (err) {
+        console.warn('[upcoming] Congress.gov bills fetch failed:', err.message);
+      }
+      const DONE_PATTERN = /signed by the president|became public law|vetoed by the president/i;
+      const activeCgBills = cgBills.filter(b => !DONE_PATTERN.test(b.latestAction?.text || ''));
+      allBillsWithRef = activeCgBills.slice(0, 200).map(b => {
+        const type    = (b.type || '').toLowerCase();
+        const number  = String(b.number || '');
+        const congress = b.congress || 119;
+        const domains  = classifyBillTitle(b.title);
+        return {
+          id:              `${type}${number}-${congress}`,
+          title:           b.title || '',
+          short_title:     `${b.type || ''}. ${number}`,
+          summary:         null,
+          primary_subject: domains[0] || null,
+          _domains:        domains,
+          introduced_date: b.updateDate || null,
+          last_vote_date:  null,
+          status:          b.latestAction?.text?.slice(0, 120) || null,
+          congress,
+          billRef:         type && number ? { type, number, congress } : null,
+        };
+      });
+      cache.set(billsKey, allBillsWithRef, 3600);
     }
 
-    // Exclude already-enacted or vetoed bills — those belong on the President page
-    const DONE_PATTERN = /signed by the president|became public law|vetoed by the president/i;
-    let activeBills = cgBills.filter(b => !DONE_PATTERN.test(b.latestAction?.text || ''));
-
-    // Filter to user's priority areas using title keyword matching.
-    // Congress.gov list response doesn't include policyArea — title keywords are the only
-    // reliable signal available without fetching each bill individually.
+    // Filter to user's priority areas (in-memory, fast)
+    let billsWithRef = allBillsWithRef;
     if (userPriorities.length > 0) {
       const userPrioritySet = new Set(userPriorities);
-      activeBills = activeBills.filter(b =>
-        classifyBillTitle(b.title).some(p => userPrioritySet.has(p))
+      billsWithRef = allBillsWithRef.filter(b =>
+        b._domains.some(p => userPrioritySet.has(p))
       );
     }
-
-    // Shape into the format the frontend expects, with billRef pre-attached
-    const billsWithRef = activeBills.slice(0, 40).map(b => {
-      const type    = (b.type || '').toLowerCase();
-      const number  = String(b.number || '');
-      const congress = b.congress || 119;
-      const domains  = classifyBillTitle(b.title);
-      return {
-        id:               `${type}${number}-${congress}`,
-        title:            b.title || '',
-        short_title:      `${b.type || ''}. ${number}`,
-        summary:          null,
-        primary_subject:  domains[0] || null,
-        introduced_date:  b.updateDate || null,
-        last_vote_date:   null,
-        status:           b.latestAction?.text?.slice(0, 120) || null,
-        congress,
-        billRef:          type && number ? { type, number, congress } : null,
-      };
-    });
+    // Strip internal _domains field, take top 40
+    billsWithRef = billsWithRef.slice(0, 40).map(({ _domains, ...rest }) => rest);
 
     res.json({
       electionYear: electionYears[0],
