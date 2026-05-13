@@ -38,28 +38,34 @@ export async function findCandidateId(fullName, state, chamber) {
   const lastName = fullName.trim().split(' ').pop();
   const nameParts = fullName.toLowerCase().replace(/[^a-z ]/g, '').split(' ').filter(p => p.length > 2);
 
-  // Try declared chamber first, then the other one (DB chamber field is sometimes wrong)
+  // Try declared chamber first, then the other one (DB chamber field is sometimes wrong).
+  // Three tiers: (1) last name + state + office, (2) full name + state + office,
+  // (3) last name + office only (no state) — catches mismatched state abbreviations.
   const primaryOffice = chamber === 'senate' ? 'S' : 'H';
   const fallbackOffice = primaryOffice === 'S' ? 'H' : 'S';
 
-  for (const office of [primaryOffice, fallbackOffice]) {
-    for (const query of [lastName, fullName]) {
-      try {
-        const data = await get('/candidates/search/', {
-          q: query, state: stateAbbr, office,
-          sort: '-receipts', per_page: 10,
-        });
-        const results = data.results || [];
-        if (!results.length) continue;
+  const attempts = [
+    { q: lastName,  state: stateAbbr, office: primaryOffice  },
+    { q: fullName,  state: stateAbbr, office: primaryOffice  },
+    { q: lastName,  state: stateAbbr, office: fallbackOffice },
+    { q: lastName,  state: null,      office: primaryOffice  },
+  ];
 
-        const match = results.find(r => {
-          const rn = (r.name || '').toLowerCase().replace(/[^a-z ]/g, '');
-          return nameParts.some(p => rn.includes(p));
-        }) || results[0];
+  for (const { q, state, office } of attempts) {
+    try {
+      const params = { q, office, per_page: 25 };
+      if (state) params.state = state;
+      const data = await get('/candidates/search/', params);
+      const results = data.results || [];
+      if (!results.length) continue;
 
-        if (match?.candidate_id) return { candidateId: match.candidate_id, fecName: match.name };
-      } catch {}
-    }
+      const match = results.find(r => {
+        const rn = (r.name || '').toLowerCase().replace(/[^a-z ]/g, '');
+        return nameParts.some(p => rn.includes(p));
+      });
+
+      if (match?.candidate_id) return { candidateId: match.candidate_id, fecName: match.name };
+    } catch {}
   }
   return null;
 }

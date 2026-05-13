@@ -40,10 +40,11 @@ app.use(cors({
 
 app.use(express.json());
 
-// Rate limiting
+// Rate limiting — authenticated users are exempt so normal browsing isn't blocked
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200,
+  max: 500,
+  skip: req => !!(req.headers.authorization?.startsWith('Bearer ')),
   message: { error: 'Too many requests, please try again in 15 minutes.' },
 });
 app.use('/api/', limiter);

@@ -74,15 +74,18 @@ async function getVoteDetail(congress, chamber, session, rollCall) {
 
 // ── Bills ─────────────────────────────────────────────────────────────────────
 
-// Get recently updated bills — used to surface upcoming/new legislation
-async function getRecentBills(congress, daysBack = 4) {
-  const from = new Date(Date.now() - daysBack * 86400000).toISOString().split('T')[0];
+// Get recently updated bills — used to surface upcoming/new legislation.
+// Fetches the most recent 250 bills by updateDate and filters locally so the
+// result is not sensitive to fromDateTime format differences across API key tiers.
+async function getRecentBills(congress, daysBack = 30) {
   const data = await get(`/bill/${congress}`, {
-    sort: 'updateDate+desc',
-    limit: 100,
-    fromDateTime: `${from}T00:00:00Z`,
+    sort: 'updateDate desc',
+    limit: 250,
   }, 3600);
-  return data.bills || [];
+  const bills = data.bills || [];
+  if (!daysBack) return bills;
+  const cutoff = new Date(Date.now() - daysBack * 86400000);
+  return bills.filter(b => new Date(b.updateDate || b.introducedDate || 0) >= cutoff);
 }
 
 async function getMemberSponsoredBills(bioguideId) {
