@@ -31,31 +31,30 @@ async function get(path, params = {}) {
   return res.json();
 }
 
-// Returns FEC candidate_id or null. Tries last name first (FEC stores as "LAST, FIRST").
-// Normalizes full state names to abbreviations. Falls back to the other chamber if no match.
+// Returns FEC candidate_id or null.
+// Uses /candidates/ endpoint with q= name search (FEC stores names as "LAST, FIRST").
+// Tries: (1) last name + state + correct office, (2) last name + state + either office,
+// (3) last name with no state filter — catches former members and state mismatches.
 export async function findCandidateId(fullName, state, chamber) {
   const stateAbbr = (state.length === 2 ? state : STATE_ABBR[state.toLowerCase()] || state).toUpperCase();
-  const lastName = fullName.trim().split(' ').pop();
+  const lastName = fullName.trim().split(/[\s,]+/).find(p => p.length > 2) || fullName.trim();
   const nameParts = fullName.toLowerCase().replace(/[^a-z ]/g, '').split(' ').filter(p => p.length > 2);
 
-  // Try declared chamber first, then the other one (DB chamber field is sometimes wrong).
-  // Three tiers: (1) last name + state + office, (2) full name + state + office,
-  // (3) last name + office only (no state) — catches mismatched state abbreviations.
   const primaryOffice = chamber === 'senate' ? 'S' : 'H';
-  const fallbackOffice = primaryOffice === 'S' ? 'H' : 'S';
 
   const attempts = [
-    { q: lastName,  state: stateAbbr, office: primaryOffice  },
-    { q: fullName,  state: stateAbbr, office: primaryOffice  },
-    { q: lastName,  state: stateAbbr, office: fallbackOffice },
-    { q: lastName,  state: null,      office: primaryOffice  },
+    { q: lastName, state: stateAbbr, office: primaryOffice },
+    { q: lastName, state: stateAbbr, office: primaryOffice === 'S' ? 'H' : 'S' },
+    { q: lastName, state: null,      office: primaryOffice },
+    { q: lastName, state: null,      office: null },
   ];
 
-  for (const { q, state, office } of attempts) {
+  for (const attempt of attempts) {
     try {
-      const params = { q, office, per_page: 25 };
-      if (state) params.state = state;
-      const data = await get('/candidates/search/', params);
+      const params = { q: attempt.q, per_page: 25 };
+      if (attempt.office) params.office = attempt.office;
+      if (attempt.state)  params.state  = attempt.state;
+      const data = await get('/candidates/', params);
       const results = data.results || [];
       if (!results.length) continue;
 

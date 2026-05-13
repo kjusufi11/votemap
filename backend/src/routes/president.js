@@ -30,7 +30,7 @@ const PRESIDENT = {
 const DOMAIN_KEYWORDS = {
   healthcare:          ['health', 'medicare', 'medicaid', 'drug price', 'vaccine', 'hospital', 'fda', 'opioid', 'public health'],
   climate:             ['climate', 'environment', 'epa', 'emission', 'fossil fuel', 'oil', 'natural gas', 'drilling', 'paris agreement', 'conservation', 'clean energy', 'renewable'],
-  immigration:         ['immigr', 'border', 'asylum', 'visa', 'deportat', 'alien', 'citizenship', 'daca', 'refugee', 'customs and border', 'ice ', 'undocumented'],
+  immigration:         ['immigr', 'border', 'asylum', 'visa', 'deportat', 'alien', 'citizenship', 'daca', 'refugee', 'customs and border', 'undocumented', 'customs enforcement'],
   economy:             ['tax', 'trade', 'tariff', 'economic', 'fiscal', 'budget', 'inflation', 'financial regulation', 'banking', 'minimum wage', 'labor', 'sanction'],
   defense:             ['defense', 'military', 'nato', 'ukraine', 'israel', 'armed forces', 'veteran', 'national security', 'pentagon', 'nuclear', 'intelligence community', 'cia', 'nsa'],
   gun_policy:          ['gun', 'firearm', 'weapon', 'second amendment', 'ammunition'],

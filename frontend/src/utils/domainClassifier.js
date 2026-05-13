@@ -35,7 +35,7 @@ const DOMAINS = {
     icon: '🗽',
     keywords: [
       'immigr', 'border', 'dhs', 'asylum', 'visa', 'deportat', 'alien',
-      'citizenship', 'daca', 'refugee', 'customs', 'ice ', 'undocumented',
+      'citizenship', 'daca', 'refugee', 'customs enforcement', 'undocumented',
       'green card', 'naturalization', 'border security',
     ],
   },
