@@ -37,7 +37,8 @@ async function get(path, params = {}) {
 // (3) last name with no state filter — catches former members and state mismatches.
 export async function findCandidateId(fullName, state, chamber) {
   const stateAbbr = (state.length === 2 ? state : STATE_ABBR[state.toLowerCase()] || state).toUpperCase();
-  const lastName = fullName.trim().split(/[\s,]+/).find(p => p.length > 2) || fullName.trim();
+  // Names stored as "First Last" — last token is the last name (FEC also stores as "LAST, FIRST")
+  const lastName = fullName.trim().split(' ').pop();
   const nameParts = fullName.toLowerCase().replace(/[^a-z ]/g, '').split(' ').filter(p => p.length > 2);
 
   const primaryOffice = chamber === 'senate' ? 'S' : 'H';

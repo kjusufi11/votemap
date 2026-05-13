@@ -32,42 +32,32 @@ function parseBillRef(short_title, id, congress) {
   return null;
 }
 
-// Congress.gov policyArea.name → user survey priority keys
-const POLICY_AREA_TO_PRIORITY = {
-  'Health':                                        ['healthcare'],
-  'Medicare':                                      ['healthcare'],
-  'Medicaid':                                      ['healthcare'],
-  'Opioid Abuse and Addiction':                    ['healthcare'],
-  'Environmental Protection':                      ['climate'],
-  'Energy':                                        ['climate'],
-  'Public Lands and Natural Resources':            ['climate'],
-  'Water Resources Development':                   ['climate'],
-  'Immigration':                                   ['immigration'],
-  'Border Security':                               ['immigration'],
-  'Firearms':                                      ['gun_policy'],
-  'Crime and Law Enforcement':                     ['criminal_justice', 'gun_policy'],
-  'Taxation':                                      ['taxes'],
-  'Economics and Public Finance':                  ['taxes'],
-  'Commerce':                                      ['taxes'],
-  'Finance and Financial Sector':                  ['taxes'],
-  'Armed Forces and National Security':            ['defense'],
-  'International Affairs':                         ['defense'],
-  'Emergency Management':                          ['defense'],
-  'Education':                                     ['education'],
-  'Sports and Recreation':                         ['education'],
-  'Social Welfare':                                ['safety_net'],
-  'Housing and Community Development':             ['safety_net'],
-  'Labor and Employment':                          ['safety_net'],
-  'Families':                                      ['safety_net'],
-  'Law':                                           ['criminal_justice'],
-  'Civil Rights and Liberties, Minority Issues':   ['criminal_justice', 'reproductive_rights'],
-  'Reproductive Rights':                           ['reproductive_rights'],
-  'Women':                                         ['reproductive_rights'],
-  'Elections':                                     ['voting_rights'],
-  'Congress':                                      ['voting_rights'],
-  'Transportation and Public Works':               ['infrastructure'],
-  'Science, Technology, Communications':           ['infrastructure'],
+// Title-based domain classifier — Congress.gov list responses don't include policyArea.
+// Maps bill title keywords → survey priority keys so we can filter without individual fetches.
+const TITLE_DOMAIN_KEYWORDS = {
+  healthcare:          ['health', 'medicare', 'medicaid', 'drug price', 'hospital', 'opioid', 'vaccine', 'prescription', 'insurance coverage', 'public health', 'mental health'],
+  climate:             ['climate', 'environment', 'clean energy', 'renewable', 'carbon', 'emission', 'fossil fuel', 'solar', 'conservation', 'pollution', 'natural gas', 'oil and gas', 'clean water', 'clean air'],
+  immigration:         ['immigr', 'border', 'asylum', 'visa', 'deportat', 'citizenship', 'daca', 'refugee', 'customs enforcement', 'undocumented'],
+  gun_policy:          ['firearm', 'gun control', 'background check', 'second amendment', 'ammunition', 'assault weapon'],
+  taxes:               ['tax cut', 'tax credit', 'tax reform', 'tariff', 'fiscal', 'debt ceiling', 'trade agreement', 'minimum wage', 'labor standard'],
+  defense:             ['defense authorization', 'military', 'veteran', 'armed forces', 'national security', 'intelligence', 'nato', 'ukraine', 'israel aid', 'foreign aid'],
+  reproductive_rights: ['abortion', 'reproductive', 'contraception', 'planned parenthood', 'fetal', 'family planning'],
+  education:           ['education', 'school', 'student loan', 'pell grant', 'college affordability', 'university', 'teacher'],
+  safety_net:          ['snap', 'food stamp', 'welfare', 'affordable housing', 'poverty', 'disability benefit', 'social security', 'nutrition', 'child care'],
+  criminal_justice:    ['criminal justice', 'police reform', 'prison reform', 'sentencing', 'law enforcement', 'civil rights', 'parole', 'bail reform'],
+  voting_rights:       ['voting rights', 'election integrity', 'ballot access', 'voter id', 'campaign finance', 'electoral'],
+  infrastructure:      ['infrastructure', 'highway', 'bridge repair', 'broadband', 'public transit', 'transportation', 'rail', 'water system', 'electric grid'],
 };
+
+// Classify a bill by its title — returns array of matching survey priority keys
+function classifyBillTitle(title) {
+  const t = (title || '').toLowerCase();
+  const found = new Set();
+  for (const [priority, keywords] of Object.entries(TITLE_DOMAIN_KEYWORDS)) {
+    if (keywords.some(kw => t.includes(kw))) found.add(priority);
+  }
+  return [...found];
+}
 
 router.get('/', async (req, res) => {
   const { userId } = req.query;
@@ -139,28 +129,29 @@ router.get('/', async (req, res) => {
     const DONE_PATTERN = /signed by the president|became public law|vetoed by the president/i;
     let activeBills = cgBills.filter(b => !DONE_PATTERN.test(b.latestAction?.text || ''));
 
-    // Filter to user's priority policy areas when logged in
+    // Filter to user's priority areas using title keyword matching.
+    // Congress.gov list response doesn't include policyArea — title keywords are the only
+    // reliable signal available without fetching each bill individually.
     if (userPriorities.length > 0) {
       const userPrioritySet = new Set(userPriorities);
-      activeBills = activeBills.filter(b => {
-        const area = b.policyArea?.name || '';
-        const domains = POLICY_AREA_TO_PRIORITY[area] || [];
-        return domains.some(d => userPrioritySet.has(d));
-      });
+      activeBills = activeBills.filter(b =>
+        classifyBillTitle(b.title).some(p => userPrioritySet.has(p))
+      );
     }
 
     // Shape into the format the frontend expects, with billRef pre-attached
     const billsWithRef = activeBills.slice(0, 40).map(b => {
-      const type   = (b.type || '').toLowerCase();
-      const number = String(b.number || '');
+      const type    = (b.type || '').toLowerCase();
+      const number  = String(b.number || '');
       const congress = b.congress || 119;
+      const domains  = classifyBillTitle(b.title);
       return {
         id:               `${type}${number}-${congress}`,
         title:            b.title || '',
         short_title:      `${b.type || ''}. ${number}`,
         summary:          null,
-        primary_subject:  b.policyArea?.name || null,
-        introduced_date:  b.introducedDate || null,
+        primary_subject:  domains[0] || null,
+        introduced_date:  b.updateDate || null,
         last_vote_date:   null,
         status:           b.latestAction?.text?.slice(0, 120) || null,
         congress,
