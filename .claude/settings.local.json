@@ -117,7 +117,25 @@
       "PowerShell(git diff *)",
       "PowerShell(& \"C:\\\\Users\\\\krena\\\\AppData\\\\Local\\\\GitHubDesktop\\\\bin\\\\git.exe\" diff --stat)",
       "PowerShell(Get-ChildItem *)",
-      "PowerShell(cmd /c \"git diff --stat\" 2>&1)"
+      "PowerShell(cmd /c \"git diff --stat\" 2>&1)",
+      "PowerShell($env:PATH += \";C:\\\\Program Files\\\\Git\\\\cmd;C:\\\\Program Files\\\\Git\\\\bin\"; cd \"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\"; git log --oneline -10)",
+      "PowerShell($env:PATH)",
+      "PowerShell(Set-ExecutionPolicy *)",
+      "PowerShell(cmd /c \"dir C:\\\\Users\\\\krena\\\\AppData\\\\Local\\\\GitHubDesktop\" 2>&1)",
+      "PowerShell(cmd /c \"dir C:\\\\Users\\\\krena\\\\AppData\\\\Local\\\\GitHubDesktop\\\\app-3.5.8\\\\resources\\\\app\\\\git\\\\cmd\" 2>&1)",
+      "PowerShell($git = \"C:\\\\Users\\\\krena\\\\AppData\\\\Local\\\\GitHubDesktop\\\\app-3.5.8\\\\resources\\\\app\\\\git\\\\cmd\\\\git.exe\"; cd \"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\"; & $git log --oneline -5)",
+      "PowerShell($git = \"C:\\\\Users\\\\krena\\\\AppData\\\\Local\\\\GitHubDesktop\\\\app-3.5.8\\\\resources\\\\app\\\\git\\\\cmd\\\\git.exe\"; cd \"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\"; & $git add backend/src/services/congress.js backend/src/index.js frontend/src/services/fecClient.js; & $git status)",
+      "PowerShell($git = \"C:\\\\Users\\\\krena\\\\AppData\\\\Local\\\\GitHubDesktop\\\\app-3.5.8\\\\resources\\\\app\\\\git\\\\cmd\\\\git.exe\"; cd \"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\"; & $git commit -m \"Fix: upcoming bills query, FEC senator lookup, rate limit for auth users\")",
+      "PowerShell($git = \"C:\\\\Users\\\\krena\\\\AppData\\\\Local\\\\GitHubDesktop\\\\app-3.5.8\\\\resources\\\\app\\\\git\\\\cmd\\\\git.exe\"; cd \"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\"; & $git push origin main)",
+      "PowerShell($git = \"C:\\\\Users\\\\krena\\\\AppData\\\\Local\\\\GitHubDesktop\\\\app-3.5.8\\\\resources\\\\app\\\\git\\\\cmd\\\\git.exe\"; cd \"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\"; & $git log --oneline -3)",
+      "PowerShell($git = \"C:\\\\Users\\\\krena\\\\AppData\\\\Local\\\\GitHubDesktop\\\\app-3.5.8\\\\resources\\\\app\\\\git\\\\cmd\\\\git.exe\"; cd \"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\"; & $git add frontend/nixpacks.toml frontend/src/services/fecClient.js frontend/src/utils/domainClassifier.js backend/src/routes/president.js backend/src/services/domainClassifier.js; & $git status)",
+      "PowerShell($git = \"C:\\\\Users\\\\krena\\\\AppData\\\\Local\\\\GitHubDesktop\\\\app-3.5.8\\\\resources\\\\app\\\\git\\\\cmd\\\\git.exe\"; cd \"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\"; & $git commit -m \"Fix: Railway build \\(npm install override\\), FEC /candidates/ endpoint, immigration classifier ice false-positive\")",
+      "WebFetch(domain:api.open.fec.gov)",
+      "PowerShell($git = \"C:\\\\Users\\\\krena\\\\AppData\\\\Local\\\\GitHubDesktop\\\\app-3.5.8\\\\resources\\\\app\\\\git\\\\cmd\\\\git.exe\"; cd \"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\"; & $git add frontend/src/services/fecClient.js backend/src/routes/upcoming.js; & $git commit -m \"Fix: FEC last-name extraction regression, bills title-keyword filter replaces missing policyArea\"; & $git push origin main)",
+      "PowerShell($git = \"C:\\\\Users\\\\krena\\\\AppData\\\\Local\\\\GitHubDesktop\\\\app-3.5.8\\\\resources\\\\app\\\\git\\\\cmd\\\\git.exe\"; cd \"C:\\\\Users\\\\krena\\\\OneDrive\\\\Documents\\\\Votemap\\\\votemap_project\\\\votemap\"; & $git add backend/src/index.js backend/src/routes/auth.js frontend/src/services/auth.js frontend/src/contexts/AuthContext.jsx frontend/src/pages/ZipLookup.jsx frontend/src/pages/MyReps.jsx; & $git commit -m \"Feature: remember ZIP - saved to DB for logged-in users, localStorage for guests, auto-redirect on return visits\"; & $git push origin main)",
+      "PowerShell($env:PATH -split ';' | Where-Object { $_ -match 'git' })",
+      "PowerShell(& cmd /c \"where git\" 2>&1)",
+      "PowerShell(& \"C:\\\\Windows\\\\System32\\\\cmd.exe\" /c \"git --version\" 2>&1)"
     ]
   }
 }
