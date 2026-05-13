@@ -12,6 +12,7 @@ const DOMAIN_LABELS = {
   reproductive_rights: 'Repro. Rights', education: 'Education',
   safety_net: 'Safety Net', criminal_justice: 'Criminal Justice',
   voting_rights: 'Voting Rights', infrastructure: 'Infrastructure',
+  government_efficiency: 'Gov. Efficiency', uncategorized: 'Other',
 };
 
 const ISSUE_TO_DOMAIN = {
@@ -510,7 +511,7 @@ export default function PresidentPage() {
               />
               {activeDomains.length > 0 && (
                 <div style={{ display: 'flex', gap: '.375rem', flexWrap: 'wrap' }}>
-                  {activeDomains.map(d => (
+                  {activeDomains.filter(d => d !== 'uncategorized').map(d => (
                     <button key={d} onClick={() => setHistoryFilter(historyFilter === d ? null : d)} style={{
                       fontSize: 11, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20,
                       border: `1px solid ${historyFilter === d ? 'transparent' : 'var(--border-med)'}`,
@@ -521,6 +522,17 @@ export default function PresidentPage() {
                       {DOMAIN_LABELS[d] || d} <span style={{ opacity: 0.55 }}>{eoCounts.counts[d]}</span>
                     </button>
                   ))}
+                  {eoCounts?.counts?.uncategorized > 0 && (
+                    <button onClick={() => setHistoryFilter(historyFilter === 'uncategorized' ? null : 'uncategorized')} style={{
+                      fontSize: 11, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20,
+                      border: `1px solid ${historyFilter === 'uncategorized' ? 'transparent' : 'var(--border-med)'}`,
+                      background: historyFilter === 'uncategorized' ? 'var(--text-3)' : 'transparent',
+                      color: historyFilter === 'uncategorized' ? 'var(--bg-2)' : 'var(--text-3)',
+                      cursor: 'pointer', transition: 'all var(--transition)',
+                    }}>
+                      Other <span style={{ opacity: 0.55 }}>{eoCounts.counts.uncategorized}</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>

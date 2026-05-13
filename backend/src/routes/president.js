@@ -28,18 +28,92 @@ const PRESIDENT = {
 // Maps keyword patterns → policy domain keys (mirrors frontend domainClassifier)
 
 const DOMAIN_KEYWORDS = {
-  healthcare:          ['health', 'medicare', 'medicaid', 'drug price', 'vaccine', 'hospital', 'fda', 'opioid', 'public health'],
-  climate:             ['climate', 'environment', 'epa', 'emission', 'fossil fuel', 'oil', 'natural gas', 'drilling', 'paris agreement', 'conservation', 'clean energy', 'renewable'],
-  immigration:         ['immigr', 'border', 'asylum', 'visa', 'deportat', 'alien', 'citizenship', 'daca', 'refugee', 'customs and border', 'undocumented', 'customs enforcement'],
-  economy:             ['tax', 'trade', 'tariff', 'economic', 'fiscal', 'budget', 'inflation', 'financial regulation', 'banking', 'minimum wage', 'labor', 'sanction'],
-  defense:             ['defense', 'military', 'nato', 'ukraine', 'israel', 'armed forces', 'veteran', 'national security', 'pentagon', 'nuclear', 'intelligence community', 'cia', 'nsa'],
-  gun_policy:          ['gun', 'firearm', 'weapon', 'second amendment', 'ammunition'],
-  reproductive_rights: ['abortion', 'reproductive', 'planned parenthood', 'contraception', 'fetal', 'family planning', 'title x'],
-  education:           ['education', 'school', 'student loan', 'college', 'university', 'dei', 'diversity equity', 'department of education'],
-  safety_net:          ['welfare', 'social security', 'housing', 'poverty', 'disability', 'snap', 'food stamp', 'medicaid'],
-  criminal_justice:    ['criminal justice', 'police', 'crime', 'law enforcement', 'prison', 'sentencing', 'pardon', 'department of justice'],
-  voting_rights:       ['election', 'voting', 'ballot', 'democracy', 'campaign finance', 'voter id', 'redistrict'],
-  infrastructure:      ['infrastructure', 'highway', 'broadband', 'transit', 'transportation', 'rail', 'bridge', 'water system'],
+  healthcare:          [
+    'health', 'medicare', 'medicaid', 'drug price', 'vaccine', 'hospital',
+    'fda', 'opioid', 'public health', 'ivf', 'in vitro fertilization',
+    'world health organization', 'who withdrawal', 'gender-affirm',
+    'gender affirm', 'sex reassignment', 'mutilation', 'transgender',
+    'women\'s health', 'mental health', 'medical treatment', 'nursing',
+    'prescription', 'biological sex', 'women\'s sports',
+  ],
+  climate:             [
+    'climate', 'environment', 'epa', 'emission', 'fossil fuel', 'oil',
+    'natural gas', 'drilling', 'paris agreement', 'conservation',
+    'clean energy', 'renewable', 'energy', 'lng', 'liquefied natural gas',
+    'energy dominance', 'national energy', 'coal', 'mining', 'offshore',
+    'pipeline', 'keystone', 'arctic', 'energy independence',
+    'energy emergency', 'energy production',
+  ],
+  immigration:         [
+    'immigr', 'border', 'asylum', 'visa', 'deportat', 'alien',
+    'citizenship', 'daca', 'refugee', 'customs and border', 'undocumented',
+    'customs enforcement', 'invasion', 'cartel', 'smuggl', 'sanctuary',
+    'parole', 'remain in mexico', 'human trafficking', 'alien enemy',
+    'title 42', 'catch and release', 'southern border', 'northern border',
+  ],
+  economy:             [
+    'tax', 'trade', 'tariff', 'economic', 'fiscal', 'budget', 'inflation',
+    'financial regulation', 'banking', 'minimum wage', 'labor', 'sanction',
+    'reciprocal', 'import duty', 'trade deficit', 'manufacturing',
+    'export', 'import', 'commerce', 'steel', 'aluminum', 'trade agreement',
+    'jobs', 'unemployment', 'wages', 'duties on', 'imposing duties',
+  ],
+  defense:             [
+    'defense', 'military', 'nato', 'ukraine', 'israel', 'armed forces',
+    'veteran', 'national security', 'pentagon', 'nuclear',
+    'intelligence community', 'cia', 'nsa', 'terror', 'terrorist',
+    'foreign adversar', 'declassif', 'tiktok', 'gulf of america',
+    'panama canal', 'foreign aid', 'foreign assistance', 'foreign policy',
+    'diplomat', 'coast guard', 'space force', 'gulf of mexico',
+    'joint chiefs', 'national emergenc',
+  ],
+  gun_policy:          [
+    'gun', 'firearm', 'weapon', 'second amendment', 'ammunition',
+  ],
+  reproductive_rights: [
+    'abortion', 'reproductive', 'planned parenthood', 'contraception',
+    'fetal', 'family planning', 'title x', 'mexico city policy',
+    'pro-life', 'life begins at conception',
+  ],
+  education:           [
+    'education', 'school', 'student loan', 'college', 'university',
+    'department of education', 'gender ideology', 'critical race',
+    'dei', 'diversity equity inclusion', 'title ix', 'curriculum',
+    'accreditation', 'merit-based', 'affirmative action', 'discriminat',
+    'indoctrinat', 'school choice', 'student debt',
+  ],
+  safety_net:          [
+    'welfare', 'social security', 'housing', 'poverty', 'disability',
+    'snap', 'food stamp', 'medicaid', 'child care', 'nutrition',
+    'homelessness', 'supplemental nutrition',
+  ],
+  criminal_justice:    [
+    'criminal justice', 'police', 'crime', 'law enforcement', 'prison',
+    'sentencing', 'pardon', 'department of justice', 'january 6',
+    'trafficking', 'gang', 'death penalty', 'ms-13', 'fentanyl',
+    'violent crime', 'prosecution', 'clemency',
+  ],
+  voting_rights:       [
+    'election', 'voting', 'ballot', 'democracy', 'campaign finance',
+    'voter id', 'redistrict', 'electoral', 'free speech', 'censorship',
+    'first amendment', 'social media censorship', 'weaponization of',
+  ],
+  infrastructure:      [
+    'infrastructure', 'highway', 'broadband', 'transit', 'transportation',
+    'rail', 'bridge', 'water system', 'electric grid', 'roads', 'airport',
+    'permitting reform',
+  ],
+  government_efficiency: [
+    'department of government efficiency', 'doge', 'government efficiency',
+    'federal employee', 'federal workforce', 'civil service', 'hiring freeze',
+    'workforce reduction', 'reduction in force', 'federal bureauc',
+    'government reform', 'agency reform', 'government waste',
+    'streamlining government', 'federal hiring', 'administrative leave',
+    'federal worker', 'deregulat', 'regulatory reform', 'regulatory burden',
+    'red tape', 'government reorgan', 'agency reorgan', 'federal contractor',
+    'reducing the size', 'right-sizing', 'accountability to policy',
+    'restoring accountability', 'schedule f',
+  ],
 };
 
 // Agency name → domain hints
@@ -57,6 +131,9 @@ const AGENCY_DOMAINS = {
   'department of transportation':    ['infrastructure'],
   'department of state':             ['defense'],
   'department of veterans affairs':  ['defense'],
+  'office of management and budget': ['government_efficiency'],
+  'office of personnel management':  ['government_efficiency'],
+  'general services administration': ['government_efficiency'],
 };
 
 function classifyDomains(eo) {
@@ -331,11 +408,17 @@ router.get('/eos/counts', async (req, res) => {
   try {
     const eoData = await fetchExecutiveOrders();
     const counts = {};
+    let uncategorized = 0;
     for (const eo of eoData.orders) {
-      for (const d of (eo.domains || [])) {
-        counts[d] = (counts[d] || 0) + 1;
+      if (!eo.domains || eo.domains.length === 0) {
+        uncategorized++;
+      } else {
+        for (const d of eo.domains) {
+          counts[d] = (counts[d] || 0) + 1;
+        }
       }
     }
+    if (uncategorized > 0) counts.uncategorized = uncategorized;
     res.json({ total: eoData.total, counts });
   } catch (err) {
     console.error('[president/eos/counts]', err.message);
@@ -355,7 +438,8 @@ router.get('/eos', async (req, res) => {
     const eoData = await fetchExecutiveOrders();
     let orders = eoData.orders;
 
-    if (domain) orders = orders.filter(eo => (eo.domains || []).includes(domain));
+    if (domain === 'uncategorized') orders = orders.filter(eo => !eo.domains || eo.domains.length === 0);
+    else if (domain) orders = orders.filter(eo => (eo.domains || []).includes(domain));
     if (q) orders = orders.filter(eo =>
       eo.title?.toLowerCase().includes(q) ||
       eo.abstract?.toLowerCase().includes(q)
